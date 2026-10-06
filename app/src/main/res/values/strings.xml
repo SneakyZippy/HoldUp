@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">HoldUp</string>
+    <string name="accessibility_service_label">HoldUp App Interceptor</string>
+    <string name="accessibility_service_description">HoldUp detects when you open selected addictive apps to introduce mindful pauses, helping you break compulsive doomscrolling habits.</string>
+</resources>

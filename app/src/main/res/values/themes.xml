@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.HoldUp" parent="android:Theme.Material.NoActionBar">
+        <item name="android:statusBarColor">#0D0F12</item>
+        <item name="android:navigationBarColor">#0D0F12</item>
+        <item name="android:windowBackground">#0D0F12</item>
+    </style>
+
+    <style name="Theme.HoldUp.Overlay" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowIsTranslucent">false</item>
+        <item name="android:statusBarColor">#0D0F12</item>
+        <item name="android:navigationBarColor">#0D0F12</item>
+        <item name="android:windowBackground">#0D0F12</item>
+        <item name="android:windowAnimationStyle">@android:style/Animation.Dialog</item>
+    </style>
+</resources>
