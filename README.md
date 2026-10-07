@@ -25,3 +25,10 @@ Build locally:
 ## Permissions
 - **Accessibility Service**: Detects app launches and handles navigation when you walk away.
 - **Usage Access**: Displays today's screen time in the reality check banner.
+
+## Contributing
+Contributions, feature suggestions, and pull requests are welcome! If you find a bug or have an idea, feel free to open an issue or submit a PR.
+
+## License
+This project is open-source under the [GNU General Public License v3.0](LICENSE). You are free to inspect, modify, and contribute to the code. Any derivative work or distribution must remain open source under the same license with attribution.
+
