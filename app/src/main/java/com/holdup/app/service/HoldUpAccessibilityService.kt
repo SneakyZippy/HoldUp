@@ -4,6 +4,7 @@ import android.accessibilityservice.AccessibilityService
 import android.content.Intent
 import android.view.accessibility.AccessibilityEvent
 import com.holdup.app.HoldUpApp
+import com.holdup.app.data.model.*
 import com.holdup.app.ui.InterventionActivity
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -68,6 +69,13 @@ class HoldUpAccessibilityService : AccessibilityService() {
             // Check if there is an active allowed session
             val hasActiveSession = prefs.isSessionActive(targetPackageName)
             if (hasActiveSession) return@launch
+
+            // Check per-app schedule window if configured
+            val rules = prefs.perAppRules.first()
+            val rule = rules[targetPackageName]
+            if (rule != null && !rule.isCurrentlyActive()) {
+                return@launch
+            }
 
             // Update debounce tracker
             lastInterceptedPackage = targetPackageName

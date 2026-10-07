@@ -100,6 +100,7 @@ fun InterventionScreen(
     var videoUri by remember { mutableStateOf<String?>(null) }
     var alternativeActivities by remember { mutableStateOf<List<AlternativeActivity>>(defaultAlternativeActivities) }
     var selectedAlternative by remember { mutableStateOf<AlternativeActivity?>(null) }
+    var maxSessionMinutes by remember { mutableIntStateOf(15) }
 
     var isInterventionCompleted by remember { mutableStateOf(isSoftNudge) }
 
@@ -123,6 +124,7 @@ fun InterventionScreen(
             }
             breathingSeconds = rule.breathingSeconds
             countdownSeconds = rule.countdownSeconds
+            maxSessionMinutes = rule.maxSessionMinutes
             photoUri = rule.customPhotoUri ?: global.lovedOnePhotoUri
             photoCaption = rule.customPhotoCaption.ifBlank { global.lovedOneCaption }
             videoUri = rule.customVideoUri ?: global.friendVideoUri
@@ -216,6 +218,7 @@ fun InterventionScreen(
             ) {
                 DecisionFooter(
                     isSoftNudge = isSoftNudge,
+                    maxSessionMinutes = maxSessionMinutes,
                     selectedAlternative = selectedAlternative,
                     onWalkAway = onWalkAway,
                     onOpenSession = onOpenSession
@@ -283,6 +286,7 @@ fun SoftNudgeBody() {
 @Composable
 fun DecisionFooter(
     isSoftNudge: Boolean,
+    maxSessionMinutes: Int = 15,
     selectedAlternative: AlternativeActivity?,
     onWalkAway: () -> Unit,
     onOpenSession: (Int) -> Unit
@@ -341,8 +345,12 @@ fun DecisionFooter(
                     SessionChip(label = "+5 min") { onOpenSession(5) }
                 } else {
                     SessionChip(label = "5 min") { onOpenSession(5) }
-                    SessionChip(label = "10 min") { onOpenSession(10) }
-                    SessionChip(label = "15 min") { onOpenSession(15) }
+                    if (maxSessionMinutes >= 10) {
+                        SessionChip(label = "10 min") { onOpenSession(10) }
+                    }
+                    if (maxSessionMinutes >= 15) {
+                        SessionChip(label = "15 min") { onOpenSession(15) }
+                    }
                 }
             }
         }

@@ -49,6 +49,8 @@ import com.holdup.app.HoldUpApp
 import com.holdup.app.data.model.*
 import com.holdup.app.service.HoldUpAccessibilityService
 import com.holdup.app.ui.components.AppIcon
+import com.holdup.app.ui.components.AppRuleBottomSheet
+import com.holdup.app.ui.onboarding.OnboardingScreen
 import com.holdup.app.ui.theme.HoldUpTheme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -79,8 +81,12 @@ fun MainScreen() {
     val todayStats by prefs.todayStats.collectAsStateWithLifecycle(initialValue = DailyStats())
     val globalSettings by prefs.globalSettings.collectAsStateWithLifecycle(initialValue = GlobalInterventionSettings())
     val alternatives by prefs.alternativeActivities.collectAsStateWithLifecycle(initialValue = defaultAlternativeActivities)
+    val perAppRules by prefs.perAppRules.collectAsStateWithLifecycle(initialValue = emptyMap())
+    val hasCompletedOnboarding by prefs.hasCompletedOnboarding.collectAsStateWithLifecycle(initialValue = false)
 
     var currentTab by remember { mutableIntStateOf(0) }
+    var showOnboardingManually by remember { mutableStateOf(false) }
+    var selectedAppForRule by remember { mutableStateOf<InstalledAppItem?>(null) }
 
     var isAccessibilityGranted by remember { mutableStateOf(false) }
     var isUsageAccessGranted by remember { mutableStateOf(false) }
@@ -96,6 +102,31 @@ fun MainScreen() {
 
     androidx.lifecycle.compose.LifecycleEventEffect(androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
         checkPermissions()
+    }
+
+    // First-launch or manual Onboarding Tour
+    if (!hasCompletedOnboarding || showOnboardingManually) {
+        OnboardingScreen(
+            monitoredPackages = monitoredPackages,
+            onToggleApp = { pkg, isMonitored ->
+                coroutineScope.launch { prefs.toggleAppMonitored(pkg, isMonitored) }
+            },
+            isAccessibilityGranted = isAccessibilityGranted,
+            isUsageAccessGranted = isUsageAccessGranted,
+            onOpenAccessibilitySettings = {
+                val intent = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
+                context.startActivity(intent)
+            },
+            onOpenUsageSettings = {
+                val intent = Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS)
+                context.startActivity(intent)
+            },
+            onCompleteOnboarding = {
+                coroutineScope.launch { prefs.setOnboardingCompleted(true) }
+                showOnboardingManually = false
+            }
+        )
+        return
     }
 
     Scaffold(
@@ -149,12 +180,17 @@ fun MainScreen() {
                     onOpenUsageSettings = {
                         val intent = Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS)
                         context.startActivity(intent)
-                    }
+                    },
+                    onOpenTour = { showOnboardingManually = true }
                 )
                 1 -> AppsTab(
                     monitoredPackages = monitoredPackages,
+                    perAppRules = perAppRules,
                     onToggleApp = { pkg, isMonitored ->
                         coroutineScope.launch { prefs.toggleAppMonitored(pkg, isMonitored) }
+                    },
+                    onConfigureApp = { appItem ->
+                        selectedAppForRule = appItem
                     }
                 )
                 2 -> InterventionsTab(
@@ -167,6 +203,20 @@ fun MainScreen() {
             }
         }
     }
+
+    selectedAppForRule?.let { appItem ->
+        AppRuleBottomSheet(
+            packageName = appItem.packageName,
+            appName = appItem.appName,
+            currentRule = perAppRules[appItem.packageName],
+            onDismiss = { selectedAppForRule = null },
+            onSaveRule = { rule ->
+                coroutineScope.launch {
+                    prefs.saveAppRule(rule)
+                }
+            }
+        )
+    }
 }
 
 @Composable
@@ -178,7 +228,8 @@ fun DashboardTab(
     isAccessibilityGranted: Boolean,
     isUsageAccessGranted: Boolean,
     onOpenAccessibilitySettings: () -> Unit,
-    onOpenUsageSettings: () -> Unit
+    onOpenUsageSettings: () -> Unit,
+    onOpenTour: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val haptic = LocalHapticFeedback.current
@@ -209,20 +260,34 @@ fun DashboardTab(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Column {
-                    Text(
-                        text = "HoldUp",
-                        style = MaterialTheme.typography.headlineLarge.copy(
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onBackground
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column {
+                        Text(
+                            text = "HoldUp",
+                            style = MaterialTheme.typography.headlineLarge.copy(
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onBackground
+                            )
                         )
-                    )
-                    Text(
-                        text = if (isMonitoringEnabled) "Mindful shield is active" else "Shield paused",
-                        style = MaterialTheme.typography.bodyMedium.copy(
-                            color = if (isMonitoringEnabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                        Text(
+                            text = if (isMonitoringEnabled) "Mindful shield is active" else "Shield paused",
+                            style = MaterialTheme.typography.bodyMedium.copy(
+                                color = if (isMonitoringEnabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                            )
                         )
-                    )
+                    }
+                    Spacer(modifier = Modifier.width(6.dp))
+                    IconButton(
+                        onClick = onOpenTour,
+                        modifier = Modifier.size(32.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Info,
+                            contentDescription = "Tour",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
                 }
 
                 Switch(
@@ -565,7 +630,9 @@ fun DashboardTab(
 @Composable
 fun AppsTab(
     monitoredPackages: Set<String>,
-    onToggleApp: (String, Boolean) -> Unit
+    perAppRules: Map<String, AppRuleConfig>,
+    onToggleApp: (String, Boolean) -> Unit,
+    onConfigureApp: (InstalledAppItem) -> Unit
 ) {
     val context = LocalContext.current
     val haptic = LocalHapticFeedback.current
@@ -611,7 +678,7 @@ fun AppsTab(
             style = MaterialTheme.typography.headlineLarge.copy(fontWeight = FontWeight.Bold)
         )
         Text(
-            text = "Toggle which apps HoldUp will introduce mindful pauses for",
+            text = "Tap any app to customize its active hours & pause style",
             style = MaterialTheme.typography.bodyMedium.copy(color = MaterialTheme.colorScheme.onSurfaceVariant)
         )
 
@@ -651,6 +718,10 @@ fun AppsTab(
             ) {
                 items(filtered, key = { it.packageName }) { appItem ->
                     val isChecked = monitoredPackages.contains(appItem.packageName)
+                    val rule = perAppRules[appItem.packageName]
+                    val scheduleLabel = rule?.schedulePreset?.displayName ?: "24/7"
+                    val styleLabel = if (rule?.ruleMode == RuleMode.SPECIFIC) rule.specificType.displayName else "Shuffle"
+
                     Surface(
                         shape = RoundedCornerShape(20.dp),
                         color = if (isChecked) {
@@ -671,14 +742,13 @@ fun AppsTab(
                             .clip(RoundedCornerShape(20.dp))
                             .clickable {
                                 haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                onToggleApp(appItem.packageName, !isChecked)
+                                onConfigureApp(appItem)
                             }
                     ) {
                         Row(
                             modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            // High-res actual app icon!
                             AppIcon(
                                 packageName = appItem.packageName,
                                 size = 46.dp
@@ -695,9 +765,9 @@ fun AppsTab(
                                     )
                                 )
                                 Text(
-                                    text = appItem.packageName,
+                                    text = if (isChecked) "$scheduleLabel • $styleLabel" else "Tap to configure rules",
                                     style = MaterialTheme.typography.labelSmall.copy(
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        color = if (isChecked) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                 )
                             }

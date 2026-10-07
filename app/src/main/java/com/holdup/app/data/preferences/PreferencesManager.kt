@@ -32,6 +32,7 @@ class PreferencesManager(private val context: Context) {
         private val KEY_PROCEEDED = intPreferencesKey("stats_proceeded")
         private val KEY_MINUTES_SAVED = intPreferencesKey("stats_minutes_saved")
         private val KEY_ACTIVE_SESSIONS = stringPreferencesKey("active_sessions_json")
+        private val KEY_ONBOARDING_COMPLETED = booleanPreferencesKey("onboarding_completed")
 
         // Popular doomscroll apps pre-populated as defaults
         val DEFAULT_TARGET_PACKAGES = setOf(
@@ -238,6 +239,16 @@ class PreferencesManager(private val context: Context) {
             }.toMutableMap()
             activeSessions.remove(packageName)
             prefs[KEY_ACTIVE_SESSIONS] = json.encodeToString(activeSessions)
+        }
+    }
+
+    val hasCompletedOnboarding: Flow<Boolean> = context.dataStore.data.map { prefs ->
+        prefs[KEY_ONBOARDING_COMPLETED] ?: false
+    }
+
+    suspend fun setOnboardingCompleted(completed: Boolean) {
+        context.dataStore.edit { prefs ->
+            prefs[KEY_ONBOARDING_COMPLETED] = completed
         }
     }
 }
