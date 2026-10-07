@@ -180,7 +180,20 @@ fun DashboardTab(
     onOpenAccessibilitySettings: () -> Unit,
     onOpenUsageSettings: () -> Unit
 ) {
+    val context = LocalContext.current
     val haptic = LocalHapticFeedback.current
+
+    val installedShieldedPackages = remember(monitoredPackages) {
+        val pm = context.packageManager
+        monitoredPackages.filter { pkg ->
+            try {
+                pm.getPackageInfo(pkg, 0)
+                true
+            } catch (_: Exception) {
+                false
+            }
+        }
+    }
 
     LazyColumn(
         modifier = Modifier
@@ -445,7 +458,7 @@ fun DashboardTab(
 
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                 Text(
-                                    text = "${monitoredPackages.size}",
+                                    text = "${installedShieldedPackages.size}",
                                     style = MaterialTheme.typography.titleLarge.copy(
                                         color = MaterialTheme.colorScheme.secondary,
                                         fontWeight = FontWeight.Bold
@@ -460,7 +473,7 @@ fun DashboardTab(
         }
 
         // Active Shielded Apps Quick Carousel
-        if (monitoredPackages.isNotEmpty()) {
+        if (installedShieldedPackages.isNotEmpty()) {
             item {
                 Column {
                     Text(
@@ -475,7 +488,16 @@ fun DashboardTab(
                     LazyRow(
                         horizontalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        items(monitoredPackages.toList()) { pkg ->
+                        items(installedShieldedPackages) { pkg ->
+                            val appName = remember(pkg) {
+                                try {
+                                    val pm = context.packageManager
+                                    val appInfo = pm.getApplicationInfo(pkg, 0)
+                                    pm.getApplicationLabel(appInfo).toString()
+                                } catch (_: Exception) {
+                                    pkg.substringAfterLast(".")
+                                }
+                            }
                             Surface(
                                 shape = RoundedCornerShape(18.dp),
                                 color = MaterialTheme.colorScheme.surfaceContainerHigh,
@@ -488,7 +510,7 @@ fun DashboardTab(
                                     AppIcon(packageName = pkg, size = 32.dp)
                                     Spacer(modifier = Modifier.width(8.dp))
                                     Text(
-                                        text = pkg.substringAfterLast("."),
+                                        text = appName,
                                         style = MaterialTheme.typography.bodyMedium.copy(
                                             fontWeight = FontWeight.Medium
                                         )
