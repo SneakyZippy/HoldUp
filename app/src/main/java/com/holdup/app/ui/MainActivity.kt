@@ -50,6 +50,7 @@ import com.holdup.app.data.model.*
 import com.holdup.app.service.HoldUpAccessibilityService
 import com.holdup.app.ui.components.AppIcon
 import com.holdup.app.ui.components.AppRuleBottomSheet
+import com.holdup.app.ui.components.QuotesManagementBottomSheet
 import com.holdup.app.ui.onboarding.OnboardingScreen
 import com.holdup.app.ui.theme.HoldUpTheme
 import kotlinx.coroutines.Dispatchers
@@ -83,10 +84,13 @@ fun MainScreen() {
     val alternatives by prefs.alternativeActivities.collectAsStateWithLifecycle(initialValue = defaultAlternativeActivities)
     val perAppRules by prefs.perAppRules.collectAsStateWithLifecycle(initialValue = emptyMap())
     val hasCompletedOnboarding by prefs.hasCompletedOnboarding.collectAsStateWithLifecycle(initialValue = false)
+    val customReflections by prefs.customReflections.collectAsStateWithLifecycle(initialValue = emptyList())
+    val dismissedReflections by prefs.dismissedReflections.collectAsStateWithLifecycle(initialValue = emptySet())
 
     var currentTab by remember { mutableIntStateOf(0) }
     var showOnboardingManually by remember { mutableStateOf(false) }
     var selectedAppForRule by remember { mutableStateOf<InstalledAppItem?>(null) }
+    var showQuotesBottomSheet by remember { mutableStateOf(false) }
 
     var isAccessibilityGranted by remember { mutableStateOf(false) }
     var isUsageAccessGranted by remember { mutableStateOf(false) }
@@ -196,9 +200,19 @@ fun MainScreen() {
                 2 -> InterventionsTab(
                     globalSettings = globalSettings,
                     alternatives = alternatives,
+                    customReflections = customReflections,
+                    dismissedReflections = dismissedReflections,
                     onSaveSettings = { updated ->
                         coroutineScope.launch { prefs.saveGlobalSettings(updated) }
-                    }
+                    },
+                    onAddCustomReflection = { text ->
+                        coroutineScope.launch { prefs.addCustomReflection(text) }
+                    },
+                    onResetDismissedReflections = {
+                        coroutineScope.launch { prefs.resetDismissedReflections() }
+                    },
+                    onOpenQuotesManager = { showQuotesBottomSheet = true },
+                    onReplayOnboarding = { showOnboardingManually = true }
                 )
             }
         }
@@ -215,6 +229,19 @@ fun MainScreen() {
                     prefs.saveAppRule(rule)
                 }
             }
+        )
+    }
+
+    if (showQuotesBottomSheet) {
+        QuotesManagementBottomSheet(
+            customReflections = customReflections,
+            dismissedReflections = dismissedReflections,
+            onDismissRequest = { showQuotesBottomSheet = false },
+            onAddQuote = { text -> coroutineScope.launch { prefs.addCustomReflection(text) } },
+            onRemoveCustomQuote = { text -> coroutineScope.launch { prefs.removeCustomReflection(text) } },
+            onDownvoteQuote = { text -> coroutineScope.launch { prefs.dismissReflection(text) } },
+            onRestoreQuote = { text -> coroutineScope.launch { prefs.restoreReflection(text) } },
+            onResetAllHidden = { coroutineScope.launch { prefs.resetDismissedReflections() } }
         )
     }
 }
@@ -792,7 +819,13 @@ fun AppsTab(
 fun InterventionsTab(
     globalSettings: GlobalInterventionSettings,
     alternatives: List<AlternativeActivity>,
-    onSaveSettings: (GlobalInterventionSettings) -> Unit
+    customReflections: List<String> = emptyList(),
+    dismissedReflections: Set<String> = emptySet(),
+    onSaveSettings: (GlobalInterventionSettings) -> Unit,
+    onAddCustomReflection: (String) -> Unit = {},
+    onResetDismissedReflections: () -> Unit = {},
+    onOpenQuotesManager: () -> Unit = {},
+    onReplayOnboarding: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val haptic = LocalHapticFeedback.current
@@ -1029,7 +1062,165 @@ fun InterventionsTab(
             }
         }
 
-        // Calm Countdown Setting
+        // Mindful Reflections Card
+        item {
+            var showAddDialog by remember { mutableStateOf(false) }
+            var newQuoteText by remember { mutableStateOf("") }
+
+            if (showAddDialog) {
+                AlertDialog(
+                    onDismissRequest = {
+                        showAddDialog = false
+                        newQuoteText = ""
+                    },
+                    title = { Text("Add Mindful Thought") },
+                    text = {
+                        Column {
+                            Text(
+                                text = "Write a grounding question or reminder to see when opening apps:",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Spacer(modifier = Modifier.height(12.dp))
+                            OutlinedTextField(
+                                value = newQuoteText,
+                                onValueChange = { newQuoteText = it },
+                                placeholder = { Text("e.g. Is this what I need right now?") },
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(14.dp)
+                            )
+                        }
+                    },
+                    confirmButton = {
+                        Button(
+                            onClick = {
+                                if (newQuoteText.isNotBlank()) {
+                                    onAddCustomReflection(newQuoteText.trim())
+                                }
+                                showAddDialog = false
+                                newQuoteText = ""
+                            }
+                        ) {
+                            Text("Save")
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = {
+                            showAddDialog = false
+                            newQuoteText = ""
+                        }) {
+                            Text("Cancel")
+                        }
+                    }
+                )
+            }
+
+            Surface(
+                shape = RoundedCornerShape(24.dp),
+                color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(20.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(text = "💭", fontSize = 22.sp, modifier = Modifier.padding(end = 10.dp))
+                            Text(
+                                text = "Mindful Reflections",
+                                style = MaterialTheme.typography.titleLarge.copy(
+                                    fontSize = 17.sp,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                            )
+                        }
+
+                        val activeCount = (defaultReflections.size + customReflections.size) - dismissedReflections.size
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f)
+                        ) {
+                            Text(
+                                text = "$activeCount active",
+                                style = MaterialTheme.typography.labelSmall.copy(
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.primary
+                                ),
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        text = "Curated thoughts & reality checks. Tap 👎 when an intervention appears to never see that quote again.",
+                        style = MaterialTheme.typography.bodyMedium.copy(
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    )
+
+                    Spacer(modifier = Modifier.height(14.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Button(
+                            onClick = onOpenQuotesManager,
+                            shape = RoundedCornerShape(14.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.FormatQuote,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Show Quotes (${defaultReflections.size + customReflections.size})")
+                        }
+
+                        OutlinedButton(
+                            onClick = { showAddDialog = true },
+                            shape = RoundedCornerShape(14.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Add,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Add")
+                        }
+                    }
+
+                    if (dismissedReflections.isNotEmpty()) {
+                        Spacer(modifier = Modifier.height(6.dp))
+                        TextButton(
+                            onClick = {
+                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                onResetDismissedReflections()
+                            },
+                            contentPadding = PaddingValues(0.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.RestartAlt,
+                                contentDescription = null,
+                                modifier = Modifier.size(14.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = "Restore ${dismissedReflections.size} hidden quote${if (dismissedReflections.size > 1) "s" else ""}",
+                                style = MaterialTheme.typography.labelSmall
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        // App Tour & Onboarding
         item {
             Surface(
                 shape = RoundedCornerShape(24.dp),
@@ -1038,9 +1229,9 @@ fun InterventionsTab(
             ) {
                 Column(modifier = Modifier.padding(20.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(text = "⏳", fontSize = 22.sp, modifier = Modifier.padding(end = 10.dp))
+                        Text(text = "🧭", fontSize = 22.sp, modifier = Modifier.padding(end = 10.dp))
                         Text(
-                            text = "Calm Delay Bar",
+                            text = "App Tour & Onboarding",
                             style = MaterialTheme.typography.titleLarge.copy(
                                 fontSize = 17.sp,
                                 fontWeight = FontWeight.SemiBold
@@ -1049,58 +1240,33 @@ fun InterventionsTab(
                     }
                     Spacer(modifier = Modifier.height(6.dp))
                     Text(
-                        text = "Current: ${globalSettings.defaultCountdownSeconds} seconds",
+                        text = "Review how HoldUp works or walk through the permission setup again.",
                         style = MaterialTheme.typography.bodyMedium.copy(
-                            color = MaterialTheme.colorScheme.primary,
-                            fontWeight = FontWeight.Medium
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     )
                     Spacer(modifier = Modifier.height(14.dp))
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+
+                    OutlinedButton(
+                        onClick = {
+                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            onReplayOnboarding()
+                        },
+                        shape = RoundedCornerShape(14.dp),
+                        modifier = Modifier.fillMaxWidth()
                     ) {
-                        listOf(5, 10, 15, 20).forEach { sec ->
-                            val isSelected = globalSettings.defaultCountdownSeconds == sec
-                            Surface(
-                                shape = RoundedCornerShape(14.dp),
-                                color = if (isSelected) {
-                                    MaterialTheme.colorScheme.primaryContainer
-                                } else {
-                                    MaterialTheme.colorScheme.surfaceContainerLowest
-                                },
-                                border = androidx.compose.foundation.BorderStroke(
-                                    1.dp,
-                                    if (isSelected) MaterialTheme.colorScheme.primary else Color.Transparent
-                                ),
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .clip(RoundedCornerShape(14.dp))
-                                    .clickable {
-                                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                        onSaveSettings(globalSettings.copy(defaultCountdownSeconds = sec))
-                                    }
-                            ) {
-                                Box(
-                                    modifier = Modifier.padding(vertical = 12.dp),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Text(
-                                        text = "${sec}s",
-                                        fontWeight = FontWeight.Bold,
-                                        color = if (isSelected) {
-                                            MaterialTheme.colorScheme.onPrimaryContainer
-                                        } else {
-                                            MaterialTheme.colorScheme.onSurface
-                                        }
-                                    )
-                                }
-                            }
-                        }
+                        Icon(
+                            imageVector = Icons.Default.Refresh,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Onboard Again")
                     }
                 }
             }
         }
+
         item { Spacer(modifier = Modifier.height(16.dp)) }
     }
 }

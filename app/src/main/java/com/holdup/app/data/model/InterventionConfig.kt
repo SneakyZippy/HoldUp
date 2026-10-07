@@ -62,10 +62,40 @@ data class GlobalInterventionSettings(
     val defaultSessionMinutes: Int = 5,
     val enabledInterventions: List<InterventionType> = listOf(
         InterventionType.BREATHING,
+        InterventionType.REFLECTION,
         InterventionType.PHOTO,
-        InterventionType.COUNTDOWN,
         InterventionType.ALTERNATIVES
     )
+)
+
+val defaultReflections: List<String> = listOf(
+    "Are you opening this out of intention, or habit?",
+    "Take a slow, deep breath. Notice how your body feels right now.",
+    "The real world is waiting for you outside this screen.",
+    "Is this how you want to spend the next 20 minutes?",
+    "Boredom is just space for your own creativity.",
+    "You are in control of your attention. Where does it belong right now?",
+    "What were you doing just before you picked up your phone?",
+    "A minute of stillness is worth hours of scrolling.",
+    "Notice the urge to scroll. Can you let it pass like a wave?",
+    "Whatever you're looking for, you won't find it at the bottom of a feed.",
+    "Your time is your life. Spend it on things you'll remember.",
+    "Pause for three seconds. Relax your shoulders and unclench your jaw.",
+    "Scrolling numbs discomfort, but presence creates joy.",
+    "Ask yourself: What do I actually need in this moment?",
+    "Look around you. Name three things you can see right now.",
+    "Almost nothing on this app will matter to you tomorrow.",
+    "Choose creation over consumption today.",
+    "You don't need to be entertained every second.",
+    "The algorithm is designed to hold you. You have the power to put it down.",
+    "Honor the goals you set for yourself earlier today.",
+    "Be present with what is, rather than escaping into what isn't.",
+    "Give yourself permission to do nothing for sixty seconds.",
+    "Peace of mind starts with protecting your focus.",
+    "Is this adding value to your life, or just filling the silence?",
+    "Every time you walk away, you strengthen your focus muscle.",
+    "One mindful choice right now can change the trajectory of your entire day.",
+    "The best moments of your life won't happen inside an app."
 )
 
 data class InstalledAppItem(

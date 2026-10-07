@@ -40,6 +40,7 @@
             android:name=".ui.InterventionActivity"
             android:exported="false"
             android:theme="@style/Theme.HoldUp.Overlay"
+            android:taskAffinity="com.holdup.app.intervention"
             android:launchMode="singleTask"
             android:excludeFromRecents="true"
             android:noHistory="true"

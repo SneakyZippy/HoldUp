@@ -33,6 +33,8 @@ class PreferencesManager(private val context: Context) {
         private val KEY_MINUTES_SAVED = intPreferencesKey("stats_minutes_saved")
         private val KEY_ACTIVE_SESSIONS = stringPreferencesKey("active_sessions_json")
         private val KEY_ONBOARDING_COMPLETED = booleanPreferencesKey("onboarding_completed")
+        private val KEY_CUSTOM_REFLECTIONS = stringSetPreferencesKey("custom_reflections")
+        private val KEY_DISMISSED_REFLECTIONS = stringSetPreferencesKey("dismissed_reflections")
 
         // Popular doomscroll apps pre-populated as defaults
         val DEFAULT_TARGET_PACKAGES = setOf(
@@ -249,6 +251,50 @@ class PreferencesManager(private val context: Context) {
     suspend fun setOnboardingCompleted(completed: Boolean) {
         context.dataStore.edit { prefs ->
             prefs[KEY_ONBOARDING_COMPLETED] = completed
+        }
+    }
+
+    val customReflections: Flow<List<String>> = context.dataStore.data.map { prefs ->
+        prefs[KEY_CUSTOM_REFLECTIONS]?.toList() ?: emptyList()
+    }
+
+    val dismissedReflections: Flow<Set<String>> = context.dataStore.data.map { prefs ->
+        prefs[KEY_DISMISSED_REFLECTIONS] ?: emptySet()
+    }
+
+    suspend fun addCustomReflection(text: String) {
+        val clean = text.trim()
+        if (clean.isBlank()) return
+        context.dataStore.edit { prefs ->
+            val current = prefs[KEY_CUSTOM_REFLECTIONS] ?: emptySet()
+            prefs[KEY_CUSTOM_REFLECTIONS] = current + clean
+        }
+    }
+
+    suspend fun removeCustomReflection(text: String) {
+        context.dataStore.edit { prefs ->
+            val current = prefs[KEY_CUSTOM_REFLECTIONS] ?: emptySet()
+            prefs[KEY_CUSTOM_REFLECTIONS] = current - text
+        }
+    }
+
+    suspend fun dismissReflection(text: String) {
+        context.dataStore.edit { prefs ->
+            val current = prefs[KEY_DISMISSED_REFLECTIONS] ?: emptySet()
+            prefs[KEY_DISMISSED_REFLECTIONS] = current + text
+        }
+    }
+
+    suspend fun restoreReflection(text: String) {
+        context.dataStore.edit { prefs ->
+            val current = prefs[KEY_DISMISSED_REFLECTIONS] ?: emptySet()
+            prefs[KEY_DISMISSED_REFLECTIONS] = current - text
+        }
+    }
+
+    suspend fun resetDismissedReflections() {
+        context.dataStore.edit { prefs ->
+            prefs.remove(KEY_DISMISSED_REFLECTIONS)
         }
     }
 }

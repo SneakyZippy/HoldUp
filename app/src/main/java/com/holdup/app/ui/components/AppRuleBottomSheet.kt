@@ -130,102 +130,144 @@ fun AppRuleBottomSheet(
             )
             Spacer(modifier = Modifier.height(10.dp))
 
-            Row(
+            Column(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                // Shuffle option
-                val isShuffle = selectedMode == RuleMode.SHUFFLE
-                Surface(
-                    shape = RoundedCornerShape(14.dp),
-                    color = if (isShuffle) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceContainer,
-                    border = androidx.compose.foundation.BorderStroke(
-                        1.dp,
-                        if (isShuffle) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)
-                    ),
-                    modifier = Modifier
-                        .weight(1f)
-                        .clip(RoundedCornerShape(14.dp))
-                        .clickable {
-                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                            selectedMode = RuleMode.SHUFFLE
-                        }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Box(
-                        modifier = Modifier.padding(vertical = 10.dp),
-                        contentAlignment = Alignment.Center
+                    // Shuffle option
+                    val isShuffle = selectedMode == RuleMode.SHUFFLE
+                    Surface(
+                        shape = RoundedCornerShape(14.dp),
+                        color = if (isShuffle) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceContainer,
+                        border = androidx.compose.foundation.BorderStroke(
+                            1.dp,
+                            if (isShuffle) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)
+                        ),
+                        modifier = Modifier
+                            .weight(1f)
+                            .clip(RoundedCornerShape(14.dp))
+                            .clickable {
+                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                selectedMode = RuleMode.SHUFFLE
+                            }
                     ) {
-                        Text(
-                            text = "🎲 Shuffle",
-                            style = MaterialTheme.typography.bodyMedium.copy(
-                                fontWeight = FontWeight.SemiBold,
-                                color = if (isShuffle) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.onSurface
+                        Box(
+                            modifier = Modifier.padding(vertical = 10.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "🎲 Shuffle",
+                                style = MaterialTheme.typography.bodyMedium.copy(
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = if (isShuffle) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.onSurface
+                                )
                             )
-                        )
+                        }
+                    }
+
+                    // Breathing option
+                    val isBreathing = selectedMode == RuleMode.SPECIFIC && selectedType == InterventionType.BREATHING
+                    Surface(
+                        shape = RoundedCornerShape(14.dp),
+                        color = if (isBreathing) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainer,
+                        border = androidx.compose.foundation.BorderStroke(
+                            1.dp,
+                            if (isBreathing) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)
+                        ),
+                        modifier = Modifier
+                            .weight(1f)
+                            .clip(RoundedCornerShape(14.dp))
+                            .clickable {
+                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                selectedMode = RuleMode.SPECIFIC
+                                selectedType = InterventionType.BREATHING
+                            }
+                    ) {
+                        Box(
+                            modifier = Modifier.padding(vertical = 10.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "🌬️ Breathing",
+                                style = MaterialTheme.typography.bodyMedium.copy(
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = if (isBreathing) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface
+                                )
+                            )
+                        }
                     }
                 }
 
-                // Breathing option
-                val isBreathing = selectedMode == RuleMode.SPECIFIC && selectedType == InterventionType.BREATHING
-                Surface(
-                    shape = RoundedCornerShape(14.dp),
-                    color = if (isBreathing) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainer,
-                    border = androidx.compose.foundation.BorderStroke(
-                        1.dp,
-                        if (isBreathing) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)
-                    ),
-                    modifier = Modifier
-                        .weight(1f)
-                        .clip(RoundedCornerShape(14.dp))
-                        .clickable {
-                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                            selectedMode = RuleMode.SPECIFIC
-                            selectedType = InterventionType.BREATHING
-                        }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Box(
-                        modifier = Modifier.padding(vertical = 10.dp),
-                        contentAlignment = Alignment.Center
+                    // Reflection option
+                    val isReflection = selectedMode == RuleMode.SPECIFIC && selectedType == InterventionType.REFLECTION
+                    Surface(
+                        shape = RoundedCornerShape(14.dp),
+                        color = if (isReflection) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainer,
+                        border = androidx.compose.foundation.BorderStroke(
+                            1.dp,
+                            if (isReflection) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)
+                        ),
+                        modifier = Modifier
+                            .weight(1f)
+                            .clip(RoundedCornerShape(14.dp))
+                            .clickable {
+                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                selectedMode = RuleMode.SPECIFIC
+                                selectedType = InterventionType.REFLECTION
+                            }
                     ) {
-                        Text(
-                            text = "🌬️ Breathing",
-                            style = MaterialTheme.typography.bodyMedium.copy(
-                                fontWeight = FontWeight.SemiBold,
-                                color = if (isBreathing) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface
+                        Box(
+                            modifier = Modifier.padding(vertical = 10.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "💭 Reflection",
+                                style = MaterialTheme.typography.bodyMedium.copy(
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = if (isReflection) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface
+                                )
                             )
-                        )
+                        }
                     }
-                }
 
-                // Countdown option
-                val isCountdown = selectedMode == RuleMode.SPECIFIC && selectedType == InterventionType.COUNTDOWN
-                Surface(
-                    shape = RoundedCornerShape(14.dp),
-                    color = if (isCountdown) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainer,
-                    border = androidx.compose.foundation.BorderStroke(
-                        1.dp,
-                        if (isCountdown) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)
-                    ),
-                    modifier = Modifier
-                        .weight(1f)
-                        .clip(RoundedCornerShape(14.dp))
-                        .clickable {
-                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                            selectedMode = RuleMode.SPECIFIC
-                            selectedType = InterventionType.COUNTDOWN
-                        }
-                ) {
-                    Box(
-                        modifier = Modifier.padding(vertical = 10.dp),
-                        contentAlignment = Alignment.Center
+                    // Photo option
+                    val isPhoto = selectedMode == RuleMode.SPECIFIC && selectedType == InterventionType.PHOTO
+                    Surface(
+                        shape = RoundedCornerShape(14.dp),
+                        color = if (isPhoto) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainer,
+                        border = androidx.compose.foundation.BorderStroke(
+                            1.dp,
+                            if (isPhoto) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)
+                        ),
+                        modifier = Modifier
+                            .weight(1f)
+                            .clip(RoundedCornerShape(14.dp))
+                            .clickable {
+                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                selectedMode = RuleMode.SPECIFIC
+                                selectedType = InterventionType.PHOTO
+                            }
                     ) {
-                        Text(
-                            text = "⏳ Delay",
-                            style = MaterialTheme.typography.bodyMedium.copy(
-                                fontWeight = FontWeight.SemiBold,
-                                color = if (isCountdown) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface
+                        Box(
+                            modifier = Modifier.padding(vertical = 10.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "🖼️ Photo",
+                                style = MaterialTheme.typography.bodyMedium.copy(
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = if (isPhoto) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface
+                                )
                             )
-                        )
+                        }
                     }
                 }
             }

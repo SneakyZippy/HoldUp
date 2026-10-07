@@ -34,7 +34,6 @@ fun LovedOneCard(
     modifier: Modifier = Modifier
 ) {
     LaunchedEffect(Unit) {
-        delay(4000L)
         onCompleted()
     }
 

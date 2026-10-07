@@ -66,7 +66,7 @@ class InterventionActivity : ComponentActivity() {
                             }
                             startActivity(homeIntent)
                         }
-                        finish()
+                        finishAndRemoveTask()
                     },
                     onOpenSession = { minutes ->
                         val scope = (application as HoldUpApp).preferencesManager
@@ -74,7 +74,21 @@ class InterventionActivity : ComponentActivity() {
                             scope.recordProceedSession(targetPackage, minutes)
                         }
                         SessionMonitorService.startSession(this@InterventionActivity, targetPackage, minutes)
-                        finish()
+
+                        // Directly switch to the target app the user wanted to open
+                        if (targetPackage.isNotBlank()) {
+                            try {
+                                val launchIntent = packageManager.getLaunchIntentForPackage(targetPackage)
+                                if (launchIntent != null) {
+                                    launchIntent.addFlags(
+                                        android.content.Intent.FLAG_ACTIVITY_NEW_TASK or
+                                        android.content.Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED
+                                    )
+                                    startActivity(launchIntent)
+                                }
+                            } catch (_: Exception) {}
+                        }
+                        finishAndRemoveTask()
                     }
                 )
             }
@@ -103,6 +117,8 @@ fun InterventionScreen(
     var maxSessionMinutes by remember { mutableIntStateOf(15) }
 
     var isInterventionCompleted by remember { mutableStateOf(isSoftNudge) }
+    var currentQuote by remember { mutableStateOf("") }
+    var availableQuotes by remember { mutableStateOf<List<String>>(defaultReflections) }
 
     // Load app-specific or global configuration
     LaunchedEffect(targetPackageName) {
@@ -110,6 +126,14 @@ fun InterventionScreen(
         val appRules = prefs.perAppRules.first()
         val activities = prefs.alternativeActivities.first()
         alternativeActivities = activities
+
+        val customQ = prefs.customReflections.first()
+        val dismissedQ = prefs.dismissedReflections.first()
+        val pool = (defaultReflections + customQ).filter { it !in dismissedQ }
+        availableQuotes = if (pool.isNotEmpty()) pool else defaultReflections
+        if (currentQuote.isEmpty() && availableQuotes.isNotEmpty()) {
+            currentQuote = availableQuotes[Random.nextInt(availableQuotes.size)]
+        }
 
         val rule = appRules[targetPackageName]
         if (rule != null) {
@@ -136,6 +160,10 @@ fun InterventionScreen(
             photoUri = global.lovedOnePhotoUri
             photoCaption = global.lovedOneCaption
             videoUri = global.friendVideoUri
+        }
+
+        if (activeInterventionType == InterventionType.REFLECTION || activeInterventionType == InterventionType.PHOTO) {
+            isInterventionCompleted = true
         }
     }
 
@@ -177,10 +205,27 @@ fun InterventionScreen(
                                 onCompleted = { isInterventionCompleted = true }
                             )
                         }
-                        InterventionType.COUNTDOWN -> {
-                            DelayCountdownBar(
-                                totalSeconds = countdownSeconds,
-                                onCompleted = { isInterventionCompleted = true }
+                        InterventionType.REFLECTION -> {
+                            ReflectionCard(
+                                quote = currentQuote.ifEmpty { "Pause and take a deep breath." },
+                                onNextQuote = {
+                                    if (availableQuotes.isNotEmpty()) {
+                                        val candidates = availableQuotes.filter { it != currentQuote }
+                                        currentQuote = if (candidates.isNotEmpty()) {
+                                            candidates[Random.nextInt(candidates.size)]
+                                        } else {
+                                            availableQuotes[Random.nextInt(availableQuotes.size)]
+                                        }
+                                    }
+                                },
+                                onDismissQuote = { dismissedText ->
+                                    coroutineScope.launch {
+                                        prefs.dismissReflection(dismissedText)
+                                    }
+                                    val remaining = availableQuotes.filter { it != dismissedText }
+                                    availableQuotes = if (remaining.isNotEmpty()) remaining else defaultReflections
+                                    currentQuote = availableQuotes[Random.nextInt(availableQuotes.size)]
+                                }
                             )
                         }
                         InterventionType.PHOTO -> {
