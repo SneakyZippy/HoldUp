@@ -233,18 +233,25 @@ fun SoftNudgeHeader(targetPackageName: String) {
             .padding(horizontal = 24.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Text(
-            text = "TIME'S UP",
-            style = MaterialTheme.typography.labelSmall.copy(
-                letterSpacing = 3.sp,
-                color = ZenCoral,
-                fontWeight = FontWeight.Bold
+        Surface(
+            shape = RoundedCornerShape(30.dp),
+            color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.5f),
+            modifier = Modifier.padding(bottom = 6.dp)
+        ) {
+            Text(
+                text = "TIME'S UP",
+                style = MaterialTheme.typography.labelSmall.copy(
+                    letterSpacing = 2.5.sp,
+                    color = MaterialTheme.colorScheme.error,
+                    fontWeight = FontWeight.Bold
+                ),
+                modifier = Modifier.padding(horizontal = 14.dp, vertical = 5.dp)
             )
-        )
-        Spacer(modifier = Modifier.height(6.dp))
+        }
+        Spacer(modifier = Modifier.height(4.dp))
         Text(
             text = "Session Complete",
-            style = MaterialTheme.typography.headlineMedium
+            style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.SemiBold)
         )
     }
 }
@@ -268,7 +275,7 @@ fun SoftNudgeBody() {
         Text(
             text = "Take this opportunity to close the app and return to the real world.",
             style = MaterialTheme.typography.bodyMedium,
-            color = ZenTextSecondary
+            color = MaterialTheme.colorScheme.onSurfaceVariant
         )
     }
 }
@@ -280,7 +287,7 @@ fun DecisionFooter(
     onWalkAway: () -> Unit,
     onOpenSession: (Int) -> Unit
 ) {
-    var selectedMinutes by remember { mutableIntStateOf(5) }
+    val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
 
     Column(
         modifier = Modifier
@@ -290,29 +297,32 @@ fun DecisionFooter(
     ) {
         // Primary Choice: Walk Away
         Button(
-            onClick = onWalkAway,
+            onClick = {
+                haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
+                onWalkAway()
+            },
             colors = ButtonDefaults.buttonColors(
-                containerColor = ZenSage,
-                contentColor = ZenBackground
+                containerColor = MaterialTheme.colorScheme.primary,
+                contentColor = MaterialTheme.colorScheme.onPrimary
             ),
-            shape = RoundedCornerShape(16.dp),
+            shape = RoundedCornerShape(26.dp),
             modifier = Modifier
                 .fillMaxWidth()
-                .height(56.dp)
+                .height(58.dp)
         ) {
             Icon(imageVector = Icons.Default.Check, contentDescription = null)
-            Spacer(modifier = Modifier.width(8.dp))
+            Spacer(modifier = Modifier.width(10.dp))
             Text(
                 text = if (selectedAlternative != null) {
                     "Walk Away & ${selectedAlternative.title}"
                 } else {
                     "Walk Away (Mindful Win)"
                 },
-                style = MaterialTheme.typography.titleLarge.copy(fontSize = 16.sp)
+                style = MaterialTheme.typography.titleLarge.copy(fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
             )
         }
 
-        Spacer(modifier = Modifier.height(14.dp))
+        Spacer(modifier = Modifier.height(16.dp))
 
         // Secondary Choice: Timed Session Chips
         Row(
@@ -321,8 +331,8 @@ fun DecisionFooter(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
-                text = if (isSoftNudge) "Grant +2 min:" else "Or open for:",
-                style = MaterialTheme.typography.labelSmall.copy(color = ZenTextSecondary)
+                text = if (isSoftNudge) "Grant extra:" else "Or open for:",
+                style = MaterialTheme.typography.labelSmall.copy(color = MaterialTheme.colorScheme.onSurfaceVariant)
             )
 
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -344,21 +354,29 @@ fun SessionChip(
     label: String,
     onClick: () -> Unit
 ) {
-    Box(
+    val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
+
+    Surface(
+        shape = RoundedCornerShape(16.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        border = androidx.compose.foundation.BorderStroke(
+            1.dp,
+            MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
+        ),
         modifier = Modifier
-            .clip(RoundedCornerShape(12.dp))
-            .background(ZenSurfaceVariant)
-            .border(1.dp, ZenBorder, RoundedCornerShape(12.dp))
-            .clickable(onClick = onClick)
-            .padding(horizontal = 14.dp, vertical = 8.dp),
-        contentAlignment = Alignment.Center
+            .clip(RoundedCornerShape(16.dp))
+            .clickable {
+                haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
+                onClick()
+            }
     ) {
         Text(
             text = label,
             style = MaterialTheme.typography.bodyMedium.copy(
                 fontWeight = FontWeight.Medium,
-                color = ZenTextPrimary
-            )
+                color = MaterialTheme.colorScheme.onSurface
+            ),
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 9.dp)
         )
     }
 }

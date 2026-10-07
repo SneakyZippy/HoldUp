@@ -3,8 +3,6 @@ package com.holdup.app.ui
 import android.app.AppOpsManager
 import android.content.Context
 import android.content.Intent
-import android.content.pm.ApplicationInfo
-import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -14,11 +12,16 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -29,16 +32,24 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import coil3.compose.AsyncImage
 import com.holdup.app.HoldUpApp
 import com.holdup.app.data.model.*
 import com.holdup.app.service.HoldUpAccessibilityService
-import com.holdup.app.ui.theme.*
+import com.holdup.app.ui.components.AppIcon
+import com.holdup.app.ui.theme.HoldUpTheme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -49,7 +60,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
 
         setContent {
-            HoldUpTheme {
+            HoldUpTheme(dynamicColor = true) {
                 MainScreen()
             }
         }
@@ -69,9 +80,8 @@ fun MainScreen() {
     val globalSettings by prefs.globalSettings.collectAsStateWithLifecycle(initialValue = GlobalInterventionSettings())
     val alternatives by prefs.alternativeActivities.collectAsStateWithLifecycle(initialValue = defaultAlternativeActivities)
 
-    var currentTab by remember { mutableIntStateOf(0) } // 0: Overview, 1: Apps, 2: Interventions
+    var currentTab by remember { mutableIntStateOf(0) }
 
-    // Permission check states
     var isAccessibilityGranted by remember { mutableStateOf(false) }
     var isUsageAccessGranted by remember { mutableStateOf(false) }
 
@@ -85,50 +95,29 @@ fun MainScreen() {
     }
 
     Scaffold(
-        containerColor = ZenBackground,
+        containerColor = MaterialTheme.colorScheme.background,
         bottomBar = {
             NavigationBar(
-                containerColor = ZenSurface,
-                tonalElevation = 0.dp
+                containerColor = MaterialTheme.colorScheme.surfaceContainer,
+                tonalElevation = 4.dp
             ) {
                 NavigationBarItem(
                     selected = currentTab == 0,
                     onClick = { currentTab = 0 },
                     icon = { Icon(Icons.Default.Dashboard, contentDescription = null) },
-                    label = { Text("Dashboard") },
-                    colors = NavigationBarItemDefaults.colors(
-                        selectedIconColor = ZenSage,
-                        selectedTextColor = ZenSage,
-                        indicatorColor = ZenSageContainer,
-                        unselectedIconColor = ZenTextSecondary,
-                        unselectedTextColor = ZenTextSecondary
-                    )
+                    label = { Text("Dashboard") }
                 )
                 NavigationBarItem(
                     selected = currentTab == 1,
                     onClick = { currentTab = 1 },
                     icon = { Icon(Icons.Default.Apps, contentDescription = null) },
-                    label = { Text("Apps") },
-                    colors = NavigationBarItemDefaults.colors(
-                        selectedIconColor = ZenSage,
-                        selectedTextColor = ZenSage,
-                        indicatorColor = ZenSageContainer,
-                        unselectedIconColor = ZenTextSecondary,
-                        unselectedTextColor = ZenTextSecondary
-                    )
+                    label = { Text("Apps") }
                 )
                 NavigationBarItem(
                     selected = currentTab == 2,
                     onClick = { currentTab = 2 },
                     icon = { Icon(Icons.Default.Tune, contentDescription = null) },
-                    label = { Text("Interventions") },
-                    colors = NavigationBarItemDefaults.colors(
-                        selectedIconColor = ZenSage,
-                        selectedTextColor = ZenSage,
-                        indicatorColor = ZenSageContainer,
-                        unselectedIconColor = ZenTextSecondary,
-                        unselectedTextColor = ZenTextSecondary
-                    )
+                    label = { Text("Studio") }
                 )
             }
         }
@@ -146,6 +135,7 @@ fun MainScreen() {
                         coroutineScope.launch { prefs.setMonitoringEnabled(enabled) }
                     },
                     todayStats = todayStats,
+                    monitoredPackages = monitoredPackages,
                     isAccessibilityGranted = isAccessibilityGranted,
                     isUsageAccessGranted = isUsageAccessGranted,
                     onOpenAccessibilitySettings = {
@@ -155,8 +145,7 @@ fun MainScreen() {
                     onOpenUsageSettings = {
                         val intent = Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS)
                         context.startActivity(intent)
-                    },
-                    monitoredCount = monitoredPackages.size
+                    }
                 )
                 1 -> AppsTab(
                     monitoredPackages = monitoredPackages,
@@ -181,20 +170,23 @@ fun DashboardTab(
     isMonitoringEnabled: Boolean,
     onToggleMonitoring: (Boolean) -> Unit,
     todayStats: DailyStats,
+    monitoredPackages: Set<String>,
     isAccessibilityGranted: Boolean,
     isUsageAccessGranted: Boolean,
     onOpenAccessibilitySettings: () -> Unit,
-    onOpenUsageSettings: () -> Unit,
-    monitoredCount: Int
+    onOpenUsageSettings: () -> Unit
 ) {
+    val haptic = LocalHapticFeedback.current
+
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
             .padding(horizontal = 20.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
+        // App Bar & Master Toggle
         item {
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(10.dp))
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -203,63 +195,75 @@ fun DashboardTab(
                 Column {
                     Text(
                         text = "HoldUp",
-                        style = MaterialTheme.typography.headlineLarge
+                        style = MaterialTheme.typography.headlineLarge.copy(
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onBackground
+                        )
                     )
                     Text(
-                        text = "Mindful Friction for Dopamine Loops",
-                        style = MaterialTheme.typography.bodyMedium
+                        text = if (isMonitoringEnabled) "Mindful shield is active" else "Shield paused",
+                        style = MaterialTheme.typography.bodyMedium.copy(
+                            color = if (isMonitoringEnabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     )
                 }
 
                 Switch(
                     checked = isMonitoringEnabled,
-                    onCheckedChange = onToggleMonitoring,
-                    colors = SwitchDefaults.colors(
-                        checkedThumbColor = ZenSage,
-                        checkedTrackColor = ZenSageContainer,
-                        uncheckedThumbColor = ZenTextSecondary,
-                        uncheckedTrackColor = ZenSurfaceVariant
-                    )
+                    onCheckedChange = {
+                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                        onToggleMonitoring(it)
+                    }
                 )
             }
         }
 
-        // Permissions Alert if missing
+        // Setup Alert if permissions missing
         if (!isAccessibilityGranted || !isUsageAccessGranted) {
             item {
-                Card(
-                    shape = RoundedCornerShape(18.dp),
-                    colors = CardDefaults.cardColors(containerColor = ZenSurfaceVariant),
+                Surface(
+                    shape = RoundedCornerShape(24.dp),
+                    color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.5f),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.3f)),
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Column(modifier = Modifier.padding(18.dp)) {
+                    Column(modifier = Modifier.padding(20.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(
-                                imageVector = Icons.Default.Warning,
+                                imageVector = Icons.Default.Shield,
                                 contentDescription = null,
-                                tint = ZenCoral
+                                tint = MaterialTheme.colorScheme.error
                             )
-                            Spacer(modifier = Modifier.width(8.dp))
+                            Spacer(modifier = Modifier.width(10.dp))
                             Text(
                                 text = "Setup Required",
-                                style = MaterialTheme.typography.titleLarge.copy(fontSize = 16.sp)
+                                style = MaterialTheme.typography.titleLarge.copy(
+                                    fontWeight = FontWeight.SemiBold,
+                                    fontSize = 17.sp,
+                                    color = MaterialTheme.colorScheme.onErrorContainer
+                                )
                             )
                         }
 
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
-                            text = "To pause doomscrolling when apps open, HoldUp needs accessibility and usage access permissions.",
-                            style = MaterialTheme.typography.bodyMedium
+                            text = "To pause doomscrolling when apps open, HoldUp needs accessibility and usage access permissions enabled.",
+                            style = MaterialTheme.typography.bodyMedium.copy(
+                                color = MaterialTheme.colorScheme.onErrorContainer
+                            )
                         )
 
-                        Spacer(modifier = Modifier.height(12.dp))
+                        Spacer(modifier = Modifier.height(14.dp))
 
                         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                             if (!isAccessibilityGranted) {
                                 Button(
                                     onClick = onOpenAccessibilitySettings,
-                                    colors = ButtonDefaults.buttonColors(containerColor = ZenSage, contentColor = ZenBackground),
-                                    shape = RoundedCornerShape(10.dp)
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = MaterialTheme.colorScheme.error,
+                                        contentColor = MaterialTheme.colorScheme.onError
+                                    ),
+                                    shape = RoundedCornerShape(14.dp)
                                 ) {
                                     Text("Enable Interceptor")
                                 }
@@ -267,9 +271,9 @@ fun DashboardTab(
                             if (!isUsageAccessGranted) {
                                 OutlinedButton(
                                     onClick = onOpenUsageSettings,
-                                    shape = RoundedCornerShape(10.dp)
+                                    shape = RoundedCornerShape(14.dp)
                                 ) {
-                                    Text("Usage Access", color = ZenTextPrimary)
+                                    Text("Usage Access")
                                 }
                             }
                         }
@@ -278,119 +282,230 @@ fun DashboardTab(
             }
         }
 
-        // Stats Hero Card
+        // Mindful Wins Gauge Hero Card
         item {
-            Card(
-                shape = RoundedCornerShape(22.dp),
-                colors = CardDefaults.cardColors(containerColor = ZenSurface),
-                border = androidx.compose.foundation.BorderStroke(1.dp, ZenBorder),
+            Surface(
+                shape = RoundedCornerShape(28.dp),
+                color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                tonalElevation = 2.dp,
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Column(modifier = Modifier.padding(20.dp)) {
-                    Text(
-                        text = "TODAY'S MINDFUL WINS",
-                        style = MaterialTheme.typography.labelSmall.copy(
-                            letterSpacing = 2.sp,
-                            color = ZenSage,
-                            fontWeight = FontWeight.Bold
-                        )
-                    )
-
-                    Spacer(modifier = Modifier.height(16.dp))
-
+                Column(
+                    modifier = Modifier.padding(22.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Column {
+                        Text(
+                            text = "TODAY'S INTENTION",
+                            style = MaterialTheme.typography.labelSmall.copy(
+                                letterSpacing = 2.sp,
+                                color = MaterialTheme.colorScheme.primary,
+                                fontWeight = FontWeight.Bold
+                            )
+                        )
+
+                        Surface(
+                            shape = RoundedCornerShape(16.dp),
+                            color = MaterialTheme.colorScheme.primaryContainer
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Timelapse,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                                    modifier = Modifier.size(13.dp)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = "~${todayStats.estimatedMinutesSaved}m saved",
+                                    style = MaterialTheme.typography.labelSmall.copy(
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                                    )
+                                )
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(24.dp))
+
+                    // Circular Progress Dial
+                    val targetProgress = if (todayStats.totalInterceptions > 0) {
+                        (todayStats.walkedAwayCount.toFloat() / todayStats.totalInterceptions.toFloat())
+                    } else {
+                        1f
+                    }
+                    val animatedProgress by animateFloatAsState(
+                        targetValue = targetProgress,
+                        animationSpec = tween(1200),
+                        label = "GaugeProgress"
+                    )
+
+                    val gaugeColor = MaterialTheme.colorScheme.primary
+                    val trackColor = MaterialTheme.colorScheme.surfaceContainerHighest
+
+                    Box(
+                        modifier = Modifier.size(170.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Canvas(modifier = Modifier.fillMaxSize()) {
+                            val strokeWidth = 14.dp.toPx()
+                            // Background track
+                            drawArc(
+                                color = trackColor,
+                                startAngle = 135f,
+                                sweepAngle = 270f,
+                                useCenter = false,
+                                style = Stroke(width = strokeWidth, cap = StrokeCap.Round)
+                            )
+                            // Animated progress arc
+                            drawArc(
+                                color = gaugeColor,
+                                startAngle = 135f,
+                                sweepAngle = 270f * animatedProgress,
+                                useCenter = false,
+                                style = Stroke(width = strokeWidth, cap = StrokeCap.Round)
+                            )
+                        }
+
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Text(
                                 text = "${todayStats.successRatePercent}%",
                                 style = MaterialTheme.typography.headlineLarge.copy(
-                                    fontSize = 42.sp,
+                                    fontSize = 38.sp,
                                     fontWeight = FontWeight.Bold,
-                                    color = ZenSage
+                                    color = MaterialTheme.colorScheme.onSurface
                                 )
                             )
                             Text(
                                 text = "Walk-Away Rate",
-                                style = MaterialTheme.typography.bodyMedium
-                            )
-                        }
-
-                        Column(horizontalAlignment = Alignment.End) {
-                            Text(
-                                text = "~${todayStats.estimatedMinutesSaved}m",
-                                style = MaterialTheme.typography.headlineLarge.copy(
-                                    fontSize = 32.sp,
-                                    color = ZenLavender
+                                style = MaterialTheme.typography.labelSmall.copy(
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
-                            )
-                            Text(
-                                text = "Screen Time Reclaimed",
-                                style = MaterialTheme.typography.bodyMedium
                             )
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(20.dp))
+                    Spacer(modifier = Modifier.height(24.dp))
 
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(14.dp))
-                            .background(ZenSurfaceVariant)
-                            .padding(horizontal = 16.dp, vertical = 12.dp),
-                        horizontalArrangement = Arrangement.SpaceAround
+                    // Triple Stat Pill Row
+                    Surface(
+                        shape = RoundedCornerShape(20.dp),
+                        color = MaterialTheme.colorScheme.surfaceContainerLowest,
+                        modifier = Modifier.fillMaxWidth()
                     ) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text(
-                                text = "${todayStats.walkedAwayCount}",
-                                style = MaterialTheme.typography.titleLarge.copy(color = ZenSage)
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 14.dp),
+                            horizontalArrangement = Arrangement.SpaceEvenly,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text(
+                                    text = "${todayStats.walkedAwayCount}",
+                                    style = MaterialTheme.typography.titleLarge.copy(
+                                        color = MaterialTheme.colorScheme.primary,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                )
+                                Text(text = "Walked Away", style = MaterialTheme.typography.labelSmall)
+                            }
+
+                            VerticalDivider(
+                                modifier = Modifier.height(28.dp),
+                                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
                             )
-                            Text(text = "Walked Away", style = MaterialTheme.typography.labelSmall)
-                        }
 
-                        VerticalDivider(
-                            modifier = Modifier.height(28.dp),
-                            color = ZenBorder
-                        )
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text(
+                                    text = "${todayStats.proceededCount}",
+                                    style = MaterialTheme.typography.titleLarge.copy(
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                )
+                                Text(text = "Mindful Opens", style = MaterialTheme.typography.labelSmall)
+                            }
 
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text(
-                                text = "${todayStats.proceededCount}",
-                                style = MaterialTheme.typography.titleLarge
+                            VerticalDivider(
+                                modifier = Modifier.height(28.dp),
+                                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
                             )
-                            Text(text = "Mindful Opens", style = MaterialTheme.typography.labelSmall)
-                        }
 
-                        VerticalDivider(
-                            modifier = Modifier.height(28.dp),
-                            color = ZenBorder
-                        )
-
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text(
-                                text = "$monitoredCount",
-                                style = MaterialTheme.typography.titleLarge.copy(color = ZenLavender)
-                            )
-                            Text(text = "Shielded Apps", style = MaterialTheme.typography.labelSmall)
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text(
+                                    text = "${monitoredPackages.size}",
+                                    style = MaterialTheme.typography.titleLarge.copy(
+                                        color = MaterialTheme.colorScheme.secondary,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                )
+                                Text(text = "Shielded Apps", style = MaterialTheme.typography.labelSmall)
+                            }
                         }
                     }
                 }
             }
         }
 
-        // Philosophy / Guidance Card
+        // Active Shielded Apps Quick Carousel
+        if (monitoredPackages.isNotEmpty()) {
+            item {
+                Column {
+                    Text(
+                        text = "Active Shields",
+                        style = MaterialTheme.typography.titleLarge.copy(
+                            fontSize = 17.sp,
+                            fontWeight = FontWeight.SemiBold
+                        ),
+                        modifier = Modifier.padding(bottom = 10.dp)
+                    )
+
+                    LazyRow(
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        items(monitoredPackages.toList()) { pkg ->
+                            Surface(
+                                shape = RoundedCornerShape(18.dp),
+                                color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                                modifier = Modifier.padding(vertical = 2.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    AppIcon(packageName = pkg, size = 32.dp)
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        text = pkg.substringAfterLast("."),
+                                        style = MaterialTheme.typography.bodyMedium.copy(
+                                            fontWeight = FontWeight.Medium
+                                        )
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Mindfulness Principle Card
         item {
-            Card(
-                shape = RoundedCornerShape(18.dp),
-                colors = CardDefaults.cardColors(containerColor = ZenSurface),
-                border = androidx.compose.foundation.BorderStroke(1.dp, ZenBorder),
+            Surface(
+                shape = RoundedCornerShape(24.dp),
+                color = MaterialTheme.colorScheme.surfaceContainer,
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Row(
-                    modifier = Modifier.padding(18.dp),
+                    modifier = Modifier.padding(20.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
@@ -401,12 +516,17 @@ fun DashboardTab(
                     Column {
                         Text(
                             text = "Friction Creates Freedom",
-                            style = MaterialTheme.typography.titleLarge.copy(fontSize = 16.sp)
+                            style = MaterialTheme.typography.titleLarge.copy(
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
                         )
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
-                            text = "Opening an app isn't a crime. HoldUp merely gives your conscious mind 5 seconds to decide if it's what you truly want.",
-                            style = MaterialTheme.typography.bodyMedium
+                            text = "Opening an app isn't a failure. HoldUp gives your conscious mind a moment to decide if this is what you truly desire right now.",
+                            style = MaterialTheme.typography.bodyMedium.copy(
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
                         )
                     }
                 }
@@ -422,6 +542,7 @@ fun AppsTab(
     onToggleApp: (String, Boolean) -> Unit
 ) {
     val context = LocalContext.current
+    val haptic = LocalHapticFeedback.current
     var installedApps by remember { mutableStateOf<List<InstalledAppItem>>(emptyList()) }
     var searchQuery by remember { mutableStateOf("") }
     var isLoading by remember { mutableStateOf(true) }
@@ -443,7 +564,10 @@ fun AppsTab(
                     )
                 }
                 .distinctBy { it.packageName }
-                .sortedWith(compareByDescending<InstalledAppItem> { monitoredPackages.contains(it.packageName) }.thenBy { it.appName })
+                .sortedWith(
+                    compareByDescending<InstalledAppItem> { monitoredPackages.contains(it.packageName) }
+                        .thenBy { it.appName.lowercase() }
+                )
 
             installedApps = apps
             isLoading = false
@@ -455,14 +579,14 @@ fun AppsTab(
             .fillMaxSize()
             .padding(horizontal = 20.dp)
     ) {
-        Spacer(modifier = Modifier.height(8.dp))
+        Spacer(modifier = Modifier.height(10.dp))
         Text(
             text = "Monitored Apps",
-            style = MaterialTheme.typography.headlineLarge
+            style = MaterialTheme.typography.headlineLarge.copy(fontWeight = FontWeight.Bold)
         )
         Text(
-            text = "Choose which apps HoldUp will introduce mindful pauses for",
-            style = MaterialTheme.typography.bodyMedium
+            text = "Toggle which apps HoldUp will introduce mindful pauses for",
+            style = MaterialTheme.typography.bodyMedium.copy(color = MaterialTheme.colorScheme.onSurfaceVariant)
         )
 
         Spacer(modifier = Modifier.height(16.dp))
@@ -470,15 +594,15 @@ fun AppsTab(
         OutlinedTextField(
             value = searchQuery,
             onValueChange = { searchQuery = it },
-            placeholder = { Text("Search installed apps...", color = ZenTextSecondary) },
-            leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = ZenTextSecondary) },
+            placeholder = { Text("Search installed apps...", color = MaterialTheme.colorScheme.onSurfaceVariant) },
+            leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant) },
             singleLine = true,
-            shape = RoundedCornerShape(14.dp),
+            shape = RoundedCornerShape(26.dp),
             colors = OutlinedTextFieldDefaults.colors(
-                focusedBorderColor = ZenSage,
-                unfocusedBorderColor = ZenBorder,
-                focusedContainerColor = ZenSurface,
-                unfocusedContainerColor = ZenSurface
+                focusedBorderColor = MaterialTheme.colorScheme.primary,
+                unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant,
+                focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh
             ),
             modifier = Modifier.fillMaxWidth()
         )
@@ -487,7 +611,7 @@ fun AppsTab(
 
         if (isLoading) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(color = ZenSage)
+                CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
             }
         } else {
             val filtered = installedApps.filter {
@@ -497,41 +621,69 @@ fun AppsTab(
 
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+                verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 items(filtered, key = { it.packageName }) { appItem ->
                     val isChecked = monitoredPackages.contains(appItem.packageName)
-                    Row(
+                    Surface(
+                        shape = RoundedCornerShape(20.dp),
+                        color = if (isChecked) {
+                            MaterialTheme.colorScheme.surfaceContainerHighest
+                        } else {
+                            MaterialTheme.colorScheme.surfaceContainer
+                        },
+                        border = androidx.compose.foundation.BorderStroke(
+                            1.dp,
+                            if (isChecked) {
+                                MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
+                            } else {
+                                MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.25f)
+                            }
+                        ),
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clip(RoundedCornerShape(14.dp))
-                            .background(ZenSurface)
-                            .border(1.dp, if (isChecked) ZenSage.copy(alpha = 0.5f) else ZenBorder, RoundedCornerShape(14.dp))
-                            .clickable { onToggleApp(appItem.packageName, !isChecked) }
-                            .padding(horizontal = 16.dp, vertical = 12.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                            .clip(RoundedCornerShape(20.dp))
+                            .clickable {
+                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                onToggleApp(appItem.packageName, !isChecked)
+                            }
                     ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = appItem.appName,
-                                style = MaterialTheme.typography.titleLarge.copy(fontSize = 16.sp)
+                        Row(
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            // High-res actual app icon!
+                            AppIcon(
+                                packageName = appItem.packageName,
+                                size = 46.dp
                             )
-                            Text(
-                                text = appItem.packageName,
-                                style = MaterialTheme.typography.labelSmall
+
+                            Spacer(modifier = Modifier.width(14.dp))
+
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = appItem.appName,
+                                    style = MaterialTheme.typography.titleLarge.copy(
+                                        fontSize = 16.sp,
+                                        fontWeight = FontWeight.SemiBold
+                                    )
+                                )
+                                Text(
+                                    text = appItem.packageName,
+                                    style = MaterialTheme.typography.labelSmall.copy(
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                )
+                            }
+
+                            Switch(
+                                checked = isChecked,
+                                onCheckedChange = {
+                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                    onToggleApp(appItem.packageName, it)
+                                }
                             )
                         }
-
-                        Switch(
-                            checked = isChecked,
-                            onCheckedChange = { onToggleApp(appItem.packageName, it) },
-                            colors = SwitchDefaults.colors(
-                                checkedThumbColor = ZenSage,
-                                checkedTrackColor = ZenSageContainer,
-                                uncheckedThumbColor = ZenTextSecondary,
-                                uncheckedTrackColor = ZenSurfaceVariant
-                            )
-                        )
                     }
                 }
                 item { Spacer(modifier = Modifier.height(16.dp)) }
@@ -547,8 +699,8 @@ fun InterventionsTab(
     onSaveSettings: (GlobalInterventionSettings) -> Unit
 ) {
     val context = LocalContext.current
+    val haptic = LocalHapticFeedback.current
 
-    // Media Pickers
     val photoPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
@@ -586,58 +738,83 @@ fun InterventionsTab(
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         item {
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(10.dp))
             Text(
                 text = "Intervention Studio",
-                style = MaterialTheme.typography.headlineLarge
+                style = MaterialTheme.typography.headlineLarge.copy(fontWeight = FontWeight.Bold)
             )
             Text(
-                text = "Customize your mindful pause experience",
-                style = MaterialTheme.typography.bodyMedium
+                text = "Customize your mindful pause and media cues",
+                style = MaterialTheme.typography.bodyMedium.copy(color = MaterialTheme.colorScheme.onSurfaceVariant)
             )
         }
 
-        // Breathing Duration Setting
+        // Breathing Duration Card
         item {
-            Card(
-                shape = RoundedCornerShape(18.dp),
-                colors = CardDefaults.cardColors(containerColor = ZenSurface),
-                border = androidx.compose.foundation.BorderStroke(1.dp, ZenBorder),
+            Surface(
+                shape = RoundedCornerShape(24.dp),
+                color = MaterialTheme.colorScheme.surfaceContainerHigh,
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Column(modifier = Modifier.padding(18.dp)) {
-                    Text(
-                        text = "🌬️ Breathing Exercise Duration",
-                        style = MaterialTheme.typography.titleLarge.copy(fontSize = 16.sp)
-                    )
+                Column(modifier = Modifier.padding(20.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(text = "🌬️", fontSize = 22.sp, modifier = Modifier.padding(end = 10.dp))
+                        Text(
+                            text = "Breathing Exercise",
+                            style = MaterialTheme.typography.titleLarge.copy(
+                                fontSize = 17.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        )
+                    }
                     Spacer(modifier = Modifier.height(6.dp))
                     Text(
                         text = "Current: ${globalSettings.defaultBreathingSeconds} seconds",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = ZenSage
+                        style = MaterialTheme.typography.bodyMedium.copy(
+                            color = MaterialTheme.colorScheme.primary,
+                            fontWeight = FontWeight.Medium
+                        )
                     )
-                    Spacer(modifier = Modifier.height(10.dp))
+                    Spacer(modifier = Modifier.height(14.dp))
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         listOf(5, 8, 12, 16).forEach { sec ->
                             val isSelected = globalSettings.defaultBreathingSeconds == sec
-                            Box(
+                            Surface(
+                                shape = RoundedCornerShape(14.dp),
+                                color = if (isSelected) {
+                                    MaterialTheme.colorScheme.primaryContainer
+                                } else {
+                                    MaterialTheme.colorScheme.surfaceContainerLowest
+                                },
+                                border = androidx.compose.foundation.BorderStroke(
+                                    1.dp,
+                                    if (isSelected) MaterialTheme.colorScheme.primary else Color.Transparent
+                                ),
                                 modifier = Modifier
                                     .weight(1f)
-                                    .clip(RoundedCornerShape(10.dp))
-                                    .background(if (isSelected) ZenSageContainer else ZenSurfaceVariant)
-                                    .border(1.dp, if (isSelected) ZenSage else ZenBorder, RoundedCornerShape(10.dp))
-                                    .clickable { onSaveSettings(globalSettings.copy(defaultBreathingSeconds = sec)) }
-                                    .padding(vertical = 10.dp),
-                                contentAlignment = Alignment.Center
+                                    .clip(RoundedCornerShape(14.dp))
+                                    .clickable {
+                                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                        onSaveSettings(globalSettings.copy(defaultBreathingSeconds = sec))
+                                    }
                             ) {
-                                Text(
-                                    text = "${sec}s",
-                                    color = if (isSelected) ZenSage else ZenTextPrimary,
-                                    fontWeight = FontWeight.Medium
-                                )
+                                Box(
+                                    modifier = Modifier.padding(vertical = 12.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = "${sec}s",
+                                        fontWeight = FontWeight.Bold,
+                                        color = if (isSelected) {
+                                            MaterialTheme.colorScheme.onPrimaryContainer
+                                        } else {
+                                            MaterialTheme.colorScheme.onSurface
+                                        }
+                                    )
+                                }
                             }
                         }
                     }
@@ -647,23 +824,30 @@ fun InterventionsTab(
 
         // Loved One's Photo
         item {
-            Card(
-                shape = RoundedCornerShape(18.dp),
-                colors = CardDefaults.cardColors(containerColor = ZenSurface),
-                border = androidx.compose.foundation.BorderStroke(1.dp, ZenBorder),
+            Surface(
+                shape = RoundedCornerShape(24.dp),
+                color = MaterialTheme.colorScheme.surfaceContainerHigh,
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Column(modifier = Modifier.padding(18.dp)) {
-                    Text(
-                        text = "❤️ Photo of a Loved One",
-                        style = MaterialTheme.typography.titleLarge.copy(fontSize = 16.sp)
-                    )
+                Column(modifier = Modifier.padding(20.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(text = "❤️", fontSize = 22.sp, modifier = Modifier.padding(end = 10.dp))
+                        Text(
+                            text = "Photo of a Loved One",
+                            style = MaterialTheme.typography.titleLarge.copy(
+                                fontSize = 17.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        )
+                    }
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
-                        text = "Shows a personal reminder of someone who matters deeply to you.",
-                        style = MaterialTheme.typography.bodyMedium
+                        text = "A heartfelt visual reminder of someone you cherish.",
+                        style = MaterialTheme.typography.bodyMedium.copy(
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     )
-                    Spacer(modifier = Modifier.height(12.dp))
+                    Spacer(modifier = Modifier.height(14.dp))
 
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -672,15 +856,14 @@ fun InterventionsTab(
                     ) {
                         Button(
                             onClick = { photoPickerLauncher.launch("image/*") },
-                            colors = ButtonDefaults.buttonColors(containerColor = ZenLavender, contentColor = ZenBackground),
-                            shape = RoundedCornerShape(10.dp)
+                            shape = RoundedCornerShape(14.dp)
                         ) {
                             Text(if (globalSettings.lovedOnePhotoUri != null) "Change Photo" else "Select Photo")
                         }
 
                         if (globalSettings.lovedOnePhotoUri != null) {
                             TextButton(onClick = { onSaveSettings(globalSettings.copy(lovedOnePhotoUri = null)) }) {
-                                Text("Remove", color = ZenCoral)
+                                Text("Remove", color = MaterialTheme.colorScheme.error)
                             }
                         }
                     }
@@ -693,13 +876,9 @@ fun InterventionsTab(
                             captionText = it
                             onSaveSettings(globalSettings.copy(lovedOneCaption = it))
                         },
-                        label = { Text("Personal Quote / Note") },
+                        label = { Text("Personal Caption / Note") },
                         modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(12.dp),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = ZenSage,
-                            unfocusedBorderColor = ZenBorder
-                        )
+                        shape = RoundedCornerShape(16.dp)
                     )
                 }
             }
@@ -707,23 +886,30 @@ fun InterventionsTab(
 
         // Friend's Video Message
         item {
-            Card(
-                shape = RoundedCornerShape(18.dp),
-                colors = CardDefaults.cardColors(containerColor = ZenSurface),
-                border = androidx.compose.foundation.BorderStroke(1.dp, ZenBorder),
+            Surface(
+                shape = RoundedCornerShape(24.dp),
+                color = MaterialTheme.colorScheme.surfaceContainerHigh,
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Column(modifier = Modifier.padding(18.dp)) {
-                    Text(
-                        text = "🎬 Friend's Video Clip",
-                        style = MaterialTheme.typography.titleLarge.copy(fontSize = 16.sp)
-                    )
+                Column(modifier = Modifier.padding(20.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(text = "🎬", fontSize = 22.sp, modifier = Modifier.padding(end = 10.dp))
+                        Text(
+                            text = "Friend's Video Message",
+                            style = MaterialTheme.typography.titleLarge.copy(
+                                fontSize = 17.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        )
+                    }
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
-                        text = "Pick a short video clip from a friend to ground you when opening apps.",
-                        style = MaterialTheme.typography.bodyMedium
+                        text = "A short video from a friend to ground you when opening apps.",
+                        style = MaterialTheme.typography.bodyMedium.copy(
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     )
-                    Spacer(modifier = Modifier.height(12.dp))
+                    Spacer(modifier = Modifier.height(14.dp))
 
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -732,15 +918,14 @@ fun InterventionsTab(
                     ) {
                         Button(
                             onClick = { videoPickerLauncher.launch("video/*") },
-                            colors = ButtonDefaults.buttonColors(containerColor = ZenSage, contentColor = ZenBackground),
-                            shape = RoundedCornerShape(10.dp)
+                            shape = RoundedCornerShape(14.dp)
                         ) {
                             Text(if (globalSettings.friendVideoUri != null) "Change Video" else "Choose Video Clip")
                         }
 
                         if (globalSettings.friendVideoUri != null) {
                             TextButton(onClick = { onSaveSettings(globalSettings.copy(friendVideoUri = null)) }) {
-                                Text("Remove", color = ZenCoral)
+                                Text("Remove", color = MaterialTheme.colorScheme.error)
                             }
                         }
                     }
@@ -750,45 +935,70 @@ fun InterventionsTab(
 
         // Calm Countdown Setting
         item {
-            Card(
-                shape = RoundedCornerShape(18.dp),
-                colors = CardDefaults.cardColors(containerColor = ZenSurface),
-                border = androidx.compose.foundation.BorderStroke(1.dp, ZenBorder),
+            Surface(
+                shape = RoundedCornerShape(24.dp),
+                color = MaterialTheme.colorScheme.surfaceContainerHigh,
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Column(modifier = Modifier.padding(18.dp)) {
-                    Text(
-                        text = "⏳ Calm Countdown Pause",
-                        style = MaterialTheme.typography.titleLarge.copy(fontSize = 16.sp)
-                    )
+                Column(modifier = Modifier.padding(20.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(text = "⏳", fontSize = 22.sp, modifier = Modifier.padding(end = 10.dp))
+                        Text(
+                            text = "Calm Delay Bar",
+                            style = MaterialTheme.typography.titleLarge.copy(
+                                fontSize = 17.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        )
+                    }
                     Spacer(modifier = Modifier.height(6.dp))
                     Text(
                         text = "Current: ${globalSettings.defaultCountdownSeconds} seconds",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = ZenSage
+                        style = MaterialTheme.typography.bodyMedium.copy(
+                            color = MaterialTheme.colorScheme.primary,
+                            fontWeight = FontWeight.Medium
+                        )
                     )
-                    Spacer(modifier = Modifier.height(10.dp))
+                    Spacer(modifier = Modifier.height(14.dp))
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         listOf(5, 10, 15, 20).forEach { sec ->
                             val isSelected = globalSettings.defaultCountdownSeconds == sec
-                            Box(
+                            Surface(
+                                shape = RoundedCornerShape(14.dp),
+                                color = if (isSelected) {
+                                    MaterialTheme.colorScheme.primaryContainer
+                                } else {
+                                    MaterialTheme.colorScheme.surfaceContainerLowest
+                                },
+                                border = androidx.compose.foundation.BorderStroke(
+                                    1.dp,
+                                    if (isSelected) MaterialTheme.colorScheme.primary else Color.Transparent
+                                ),
                                 modifier = Modifier
                                     .weight(1f)
-                                    .clip(RoundedCornerShape(10.dp))
-                                    .background(if (isSelected) ZenSageContainer else ZenSurfaceVariant)
-                                    .border(1.dp, if (isSelected) ZenSage else ZenBorder, RoundedCornerShape(10.dp))
-                                    .clickable { onSaveSettings(globalSettings.copy(defaultCountdownSeconds = sec)) }
-                                    .padding(vertical = 10.dp),
-                                contentAlignment = Alignment.Center
+                                    .clip(RoundedCornerShape(14.dp))
+                                    .clickable {
+                                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                        onSaveSettings(globalSettings.copy(defaultCountdownSeconds = sec))
+                                    }
                             ) {
-                                Text(
-                                    text = "${sec}s",
-                                    color = if (isSelected) ZenSage else ZenTextPrimary,
-                                    fontWeight = FontWeight.Medium
-                                )
+                                Box(
+                                    modifier = Modifier.padding(vertical = 12.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = "${sec}s",
+                                        fontWeight = FontWeight.Bold,
+                                        color = if (isSelected) {
+                                            MaterialTheme.colorScheme.onPrimaryContainer
+                                        } else {
+                                            MaterialTheme.colorScheme.onSurface
+                                        }
+                                    )
+                                }
                             }
                         }
                     }
