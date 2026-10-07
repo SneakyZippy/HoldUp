@@ -86,11 +86,15 @@ fun MainScreen() {
     var isUsageAccessGranted by remember { mutableStateOf(false) }
 
     fun checkPermissions() {
-        isAccessibilityGranted = HoldUpAccessibilityService.instance != null
+        isAccessibilityGranted = checkAccessibilityPermission(context)
         isUsageAccessGranted = checkUsageStatsPermission(context)
     }
 
     LaunchedEffect(Unit) {
+        checkPermissions()
+    }
+
+    androidx.lifecycle.compose.LifecycleEventEffect(androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
         checkPermissions()
     }
 
@@ -1026,4 +1030,18 @@ private fun checkUsageStatsPermission(context: Context): Boolean {
         )
     }
     return mode == AppOpsManager.MODE_ALLOWED
+}
+
+private fun checkAccessibilityPermission(context: Context): Boolean {
+    if (HoldUpAccessibilityService.instance != null) return true
+    return try {
+        val enabledSetting = Settings.Secure.getString(
+            context.contentResolver,
+            Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES
+        ) ?: return false
+        enabledSetting.contains(context.packageName, ignoreCase = true) &&
+                enabledSetting.contains("HoldUpAccessibilityService", ignoreCase = true)
+    } catch (_: Exception) {
+        false
+    }
 }
