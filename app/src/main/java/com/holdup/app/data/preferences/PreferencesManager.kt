@@ -35,6 +35,8 @@ class PreferencesManager(private val context: Context) {
         private val KEY_ONBOARDING_COMPLETED = booleanPreferencesKey("onboarding_completed")
         private val KEY_CUSTOM_REFLECTIONS = stringSetPreferencesKey("custom_reflections")
         private val KEY_DISMISSED_REFLECTIONS = stringSetPreferencesKey("dismissed_reflections")
+        private val KEY_POINTS_TODAY = intPreferencesKey("stats_points_today")
+        private val KEY_LIFETIME_POINTS = intPreferencesKey("stats_lifetime_points")
 
         // Popular doomscroll apps pre-populated as defaults
         val DEFAULT_TARGET_PACKAGES = setOf(
@@ -102,16 +104,22 @@ class PreferencesManager(private val context: Context) {
     val todayStats: Flow<DailyStats> = context.dataStore.data.map { prefs ->
         val savedDate = prefs[KEY_TODAY_DATE] ?: ""
         val today = getTodayDateString()
+        val lifetime = prefs[KEY_LIFETIME_POINTS] ?: 0
         if (savedDate == today) {
             DailyStats(
                 dateString = today,
                 totalInterceptions = prefs[KEY_TOTAL_INTERCEPTIONS] ?: 0,
                 walkedAwayCount = prefs[KEY_WALKED_AWAY] ?: 0,
                 proceededCount = prefs[KEY_PROCEEDED] ?: 0,
-                estimatedMinutesSaved = prefs[KEY_MINUTES_SAVED] ?: 0
+                estimatedMinutesSaved = prefs[KEY_MINUTES_SAVED] ?: 0,
+                pointsEarnedToday = prefs[KEY_POINTS_TODAY] ?: 0,
+                lifetimePoints = lifetime
             )
         } else {
-            DailyStats(dateString = today)
+            DailyStats(
+                dateString = today,
+                lifetimePoints = lifetime
+            )
         }
     }
 
@@ -174,21 +182,28 @@ class PreferencesManager(private val context: Context) {
         }
     }
 
-    suspend fun recordWalkAway(minutesSavedEstimate: Int = 15) {
+    suspend fun recordWalkAway(minutesSavedEstimate: Int = 15, isAlternativeActivity: Boolean = false) {
         val today = getTodayDateString()
+        val pointsToAdd = if (isAlternativeActivity) 20 else 10
         context.dataStore.edit { prefs ->
             val savedDate = prefs[KEY_TODAY_DATE] ?: ""
+            val lifetime = prefs[KEY_LIFETIME_POINTS] ?: 0
+            prefs[KEY_LIFETIME_POINTS] = lifetime + pointsToAdd
+
             if (savedDate == today) {
                 val walked = prefs[KEY_WALKED_AWAY] ?: 0
                 val saved = prefs[KEY_MINUTES_SAVED] ?: 0
+                val pointsToday = prefs[KEY_POINTS_TODAY] ?: 0
                 prefs[KEY_WALKED_AWAY] = walked + 1
                 prefs[KEY_MINUTES_SAVED] = saved + minutesSavedEstimate
+                prefs[KEY_POINTS_TODAY] = pointsToday + pointsToAdd
             } else {
                 prefs[KEY_TODAY_DATE] = today
                 prefs[KEY_TOTAL_INTERCEPTIONS] = 1
                 prefs[KEY_WALKED_AWAY] = 1
                 prefs[KEY_PROCEEDED] = 0
                 prefs[KEY_MINUTES_SAVED] = minutesSavedEstimate
+                prefs[KEY_POINTS_TODAY] = pointsToAdd
             }
         }
     }

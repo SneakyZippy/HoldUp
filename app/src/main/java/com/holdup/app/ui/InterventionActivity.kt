@@ -51,11 +51,11 @@ class InterventionActivity : ComponentActivity() {
                 InterventionScreen(
                     targetPackageName = targetPackage,
                     isSoftNudge = isSoftNudge,
-                    onWalkAway = {
+                    onWalkAway = { isAlternative ->
                         val scope = (application as HoldUpApp).preferencesManager
-                        // Log mindful win
+                        // Log mindful win with points
                         kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
-                            scope.recordWalkAway(15)
+                            scope.recordWalkAway(15, isAlternativeActivity = isAlternative)
                         }
                         // Navigate to home screen
                         val navigated = HoldUpAccessibilityService.performGoHome()
@@ -100,7 +100,7 @@ class InterventionActivity : ComponentActivity() {
 fun InterventionScreen(
     targetPackageName: String,
     isSoftNudge: Boolean,
-    onWalkAway: () -> Unit,
+    onWalkAway: (Boolean) -> Unit,
     onOpenSession: (Int) -> Unit
 ) {
     val coroutineScope = rememberCoroutineScope()
@@ -162,7 +162,9 @@ fun InterventionScreen(
             videoUri = global.friendVideoUri
         }
 
-        if (activeInterventionType == InterventionType.REFLECTION || activeInterventionType == InterventionType.PHOTO) {
+        if (activeInterventionType == InterventionType.REFLECTION ||
+            activeInterventionType == InterventionType.PHOTO ||
+            activeInterventionType == InterventionType.ALTERNATIVES) {
             isInterventionCompleted = true
         }
     }
@@ -246,7 +248,7 @@ fun InterventionScreen(
                                 activities = alternativeActivities,
                                 selectedActivity = selectedAlternative,
                                 onSelectActivity = {
-                                    selectedAlternative = it
+                                    selectedAlternative = if (selectedAlternative?.id == it.id) null else it
                                     isInterventionCompleted = true
                                 }
                             )
@@ -265,7 +267,7 @@ fun InterventionScreen(
                     isSoftNudge = isSoftNudge,
                     maxSessionMinutes = maxSessionMinutes,
                     selectedAlternative = selectedAlternative,
-                    onWalkAway = onWalkAway,
+                    onWalkAway = { onWalkAway(selectedAlternative != null) },
                     onOpenSession = onOpenSession
                 )
             }
@@ -363,9 +365,9 @@ fun DecisionFooter(
             Spacer(modifier = Modifier.width(10.dp))
             Text(
                 text = if (selectedAlternative != null) {
-                    "Walk Away & ${selectedAlternative.title}"
+                    "${selectedAlternative.title} (+20 pts)"
                 } else {
-                    "Walk Away (Mindful Win)"
+                    "Walk Away (+10 pts)"
                 },
                 style = MaterialTheme.typography.titleLarge.copy(fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
             )
