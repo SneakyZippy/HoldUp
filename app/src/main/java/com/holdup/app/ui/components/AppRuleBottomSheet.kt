@@ -134,11 +134,41 @@ fun AppRuleBottomSheet(
                 modifier = Modifier.fillMaxWidth(),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
+                // Row 1: Rotation and Shuffle
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    // Shuffle option
+                    val isRotate = selectedMode == RuleMode.ROTATE
+                    Surface(
+                        shape = RoundedCornerShape(14.dp),
+                        color = if (isRotate) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainer,
+                        border = androidx.compose.foundation.BorderStroke(
+                            1.dp,
+                            if (isRotate) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)
+                        ),
+                        modifier = Modifier
+                            .weight(1f)
+                            .clip(RoundedCornerShape(14.dp))
+                            .clickable {
+                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                selectedMode = RuleMode.ROTATE
+                            }
+                    ) {
+                        Box(
+                            modifier = Modifier.padding(vertical = 10.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "🔄 Rotate in Turn",
+                                style = MaterialTheme.typography.bodyMedium.copy(
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = if (isRotate) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface
+                                )
+                            )
+                        }
+                    }
+
                     val isShuffle = selectedMode == RuleMode.SHUFFLE
                     Surface(
                         shape = RoundedCornerShape(14.dp),
@@ -160,7 +190,7 @@ fun AppRuleBottomSheet(
                             contentAlignment = Alignment.Center
                         ) {
                             Text(
-                                text = "🎲 Shuffle",
+                                text = "🎲 Shuffle Deck",
                                 style = MaterialTheme.typography.bodyMedium.copy(
                                     fontWeight = FontWeight.SemiBold,
                                     color = if (isShuffle) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.onSurface
@@ -168,8 +198,13 @@ fun AppRuleBottomSheet(
                             )
                         }
                     }
+                }
 
-                    // Breathing option
+                // Row 2: Breathing and Reflection
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
                     val isBreathing = selectedMode == RuleMode.SPECIFIC && selectedType == InterventionType.BREATHING
                     Surface(
                         shape = RoundedCornerShape(14.dp),
@@ -200,13 +235,7 @@ fun AppRuleBottomSheet(
                             )
                         }
                     }
-                }
 
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    // Reflection option
                     val isReflection = selectedMode == RuleMode.SPECIFIC && selectedType == InterventionType.REFLECTION
                     Surface(
                         shape = RoundedCornerShape(14.dp),
@@ -237,8 +266,44 @@ fun AppRuleBottomSheet(
                             )
                         }
                     }
+                }
 
-                    // Photo option
+                // Row 3: Healthy Swaps and Photo
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    val isAlternatives = selectedMode == RuleMode.SPECIFIC && selectedType == InterventionType.ALTERNATIVES
+                    Surface(
+                        shape = RoundedCornerShape(14.dp),
+                        color = if (isAlternatives) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainer,
+                        border = androidx.compose.foundation.BorderStroke(
+                            1.dp,
+                            if (isAlternatives) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)
+                        ),
+                        modifier = Modifier
+                            .weight(1f)
+                            .clip(RoundedCornerShape(14.dp))
+                            .clickable {
+                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                selectedMode = RuleMode.SPECIFIC
+                                selectedType = InterventionType.ALTERNATIVES
+                            }
+                    ) {
+                        Box(
+                            modifier = Modifier.padding(vertical = 10.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "⚡ Healthy Swaps",
+                                style = MaterialTheme.typography.bodyMedium.copy(
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = if (isAlternatives) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface
+                                )
+                            )
+                        }
+                    }
+
                     val isPhoto = selectedMode == RuleMode.SPECIFIC && selectedType == InterventionType.PHOTO
                     Surface(
                         shape = RoundedCornerShape(14.dp),
@@ -265,6 +330,43 @@ fun AppRuleBottomSheet(
                                 style = MaterialTheme.typography.bodyMedium.copy(
                                     fontWeight = FontWeight.SemiBold,
                                     color = if (isPhoto) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface
+                                )
+                            )
+                        }
+                    }
+                }
+
+                // Row 4: Friend's Video
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    val isVideo = selectedMode == RuleMode.SPECIFIC && selectedType == InterventionType.VIDEO
+                    Surface(
+                        shape = RoundedCornerShape(14.dp),
+                        color = if (isVideo) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainer,
+                        border = androidx.compose.foundation.BorderStroke(
+                            1.dp,
+                            if (isVideo) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)
+                        ),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(14.dp))
+                            .clickable {
+                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                selectedMode = RuleMode.SPECIFIC
+                                selectedType = InterventionType.VIDEO
+                            }
+                    ) {
+                        Box(
+                            modifier = Modifier.padding(vertical = 10.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "🎬 Friend's Video",
+                                style = MaterialTheme.typography.bodyMedium.copy(
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = if (isVideo) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface
                                 )
                             )
                         }

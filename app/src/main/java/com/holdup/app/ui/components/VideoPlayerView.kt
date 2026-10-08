@@ -77,12 +77,22 @@ fun VideoPlayerView(
     }
 
     var exoPlayer by remember { mutableStateOf<ExoPlayer?>(null) }
+    var playbackFailed by remember { mutableStateOf(false) }
 
-    DisposableEffect(videoUriString) {
+    val parsedUri = remember(videoUriString) {
+        if (videoUriString.startsWith("/")) {
+            Uri.fromFile(java.io.File(videoUriString))
+        } else {
+            Uri.parse(videoUriString)
+        }
+    }
+
+    DisposableEffect(parsedUri) {
         val player = ExoPlayer.Builder(context).build().apply {
-            val mediaItem = MediaItem.fromUri(Uri.parse(videoUriString))
+            val mediaItem = MediaItem.fromUri(parsedUri)
             setMediaItem(mediaItem)
             repeatMode = Player.REPEAT_MODE_OFF
+            volume = 1f
             prepare()
             playWhenReady = true
             addListener(object : Player.Listener {
@@ -90,6 +100,12 @@ fun VideoPlayerView(
                     if (playbackState == Player.STATE_ENDED) {
                         onCompleted()
                     }
+                }
+
+                override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
+                    android.util.Log.e("VideoPlayerView", "Playback error: ${error.message}", error)
+                    playbackFailed = true
+                    onCompleted()
                 }
             })
         }
@@ -109,21 +125,46 @@ fun VideoPlayerView(
             .background(ZenSurfaceVariant),
         contentAlignment = Alignment.Center
     ) {
-        AndroidView(
-            factory = { ctx ->
-                PlayerView(ctx).apply {
-                    this.player = exoPlayer
-                    useController = false
-                    layoutParams = FrameLayout.LayoutParams(
-                        ViewGroup.LayoutParams.MATCH_PARENT,
-                        ViewGroup.LayoutParams.MATCH_PARENT
-                    )
-                }
-            },
-            update = { playerView ->
-                playerView.player = exoPlayer
-            },
-            modifier = Modifier.fillMaxSize()
-        )
+        if (playbackFailed) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier.padding(16.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.PlayCircleOutline,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.size(48.dp)
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = "Video unavailable",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.error
+                )
+                Text(
+                    text = "Please re-select the video clip in Studio",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        } else {
+            AndroidView(
+                factory = { ctx ->
+                    PlayerView(ctx).apply {
+                        this.player = exoPlayer
+                        useController = false
+                        layoutParams = FrameLayout.LayoutParams(
+                            ViewGroup.LayoutParams.MATCH_PARENT,
+                            ViewGroup.LayoutParams.MATCH_PARENT
+                        )
+                    }
+                },
+                update = { playerView ->
+                    playerView.player = exoPlayer
+                },
+                modifier = Modifier.fillMaxSize()
+            )
+        }
     }
 }

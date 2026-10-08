@@ -37,6 +37,9 @@ class PreferencesManager(private val context: Context) {
         private val KEY_DISMISSED_REFLECTIONS = stringSetPreferencesKey("dismissed_reflections")
         private val KEY_POINTS_TODAY = intPreferencesKey("stats_points_today")
         private val KEY_LIFETIME_POINTS = intPreferencesKey("stats_lifetime_points")
+        private val KEY_LAST_INTERVENTION_TYPE = stringPreferencesKey("last_intervention_type")
+        private val KEY_SHUFFLE_BAG = stringPreferencesKey("shuffle_bag_json")
+        private val KEY_LAST_REFLECTION_QUOTE = stringPreferencesKey("last_reflection_quote")
 
         // Popular doomscroll apps pre-populated as defaults
         val DEFAULT_TARGET_PACKAGES = setOf(
@@ -311,5 +314,89 @@ class PreferencesManager(private val context: Context) {
         context.dataStore.edit { prefs ->
             prefs.remove(KEY_DISMISSED_REFLECTIONS)
         }
+    }
+
+    suspend fun getNextInterventionType(
+        mode: RuleMode,
+        eligibleTypes: List<InterventionType>
+    ): InterventionType {
+        if (eligibleTypes.isEmpty()) return InterventionType.BREATHING
+        if (eligibleTypes.size == 1) return eligibleTypes.first()
+
+        val prefs = context.dataStore.data.first()
+        val lastTypeName = prefs[KEY_LAST_INTERVENTION_TYPE]
+
+        val selectedType: InterventionType = when (mode) {
+            RuleMode.ROTATE, RuleMode.SEQUENCE -> {
+                val lastIndex = eligibleTypes.indexOfFirst { it.name == lastTypeName }
+                val nextIndex = if (lastIndex != -1) {
+                    (lastIndex + 1) % eligibleTypes.size
+                } else {
+                    0
+                }
+                eligibleTypes[nextIndex]
+            }
+            RuleMode.SHUFFLE -> {
+                val rawBag = prefs[KEY_SHUFFLE_BAG]
+                var currentBag: List<String> = try {
+                    if (!rawBag.isNullOrBlank()) json.decodeFromString<List<String>>(rawBag) else emptyList()
+                } catch (_: Exception) {
+                    emptyList()
+                }
+
+                // Filter bag to only currently eligible types
+                currentBag = currentBag.filter { name -> eligibleTypes.any { it.name == name } }
+
+                // If bag is empty, create a fresh shuffled bag
+                if (currentBag.isEmpty()) {
+                    val shuffled = eligibleTypes.map { it.name }.shuffled().toMutableList()
+                    // Prevent immediate repetition from previous cycle if more than 1 item
+                    if (shuffled.size > 1 && shuffled.first() == lastTypeName) {
+                        val temp = shuffled[0]
+                        shuffled[0] = shuffled[1]
+                        shuffled[1] = temp
+                    }
+                    currentBag = shuffled
+                }
+
+                val chosenName = currentBag.first()
+                val remainingBag = currentBag.drop(1)
+                context.dataStore.edit { editPrefs ->
+                    editPrefs[KEY_SHUFFLE_BAG] = json.encodeToString(remainingBag)
+                }
+
+                eligibleTypes.firstOrNull { it.name == chosenName } ?: eligibleTypes.first()
+            }
+            RuleMode.SPECIFIC -> {
+                eligibleTypes.first()
+            }
+        }
+
+        context.dataStore.edit { editPrefs ->
+            editPrefs[KEY_LAST_INTERVENTION_TYPE] = selectedType.name
+        }
+
+        return selectedType
+    }
+
+    suspend fun getNextReflectionQuote(availableQuotes: List<String>): String {
+        if (availableQuotes.isEmpty()) return "Take a slow, deep breath."
+        if (availableQuotes.size == 1) return availableQuotes.first()
+
+        val prefs = context.dataStore.data.first()
+        val lastQuote = prefs[KEY_LAST_REFLECTION_QUOTE]
+
+        val candidates = availableQuotes.filter { it != lastQuote }
+        val chosen = if (candidates.isNotEmpty()) {
+            candidates.random()
+        } else {
+            availableQuotes.random()
+        }
+
+        context.dataStore.edit { editPrefs ->
+            editPrefs[KEY_LAST_REFLECTION_QUOTE] = chosen
+        }
+
+        return chosen
     }
 }

@@ -13,7 +13,7 @@ enum class SchedulePreset(val displayName: String, val subtitle: String) {
 @Serializable
 data class AppRuleConfig(
     val packageName: String,
-    val ruleMode: RuleMode = RuleMode.SHUFFLE,
+    val ruleMode: RuleMode = RuleMode.ROTATE,
     val specificType: InterventionType = InterventionType.BREATHING,
     val breathingSeconds: Int = 8,
     val countdownSeconds: Int = 10,
@@ -54,6 +54,7 @@ fun AppRuleConfig.isCurrentlyActive(): Boolean {
 
 @Serializable
 data class GlobalInterventionSettings(
+    val defaultRuleMode: RuleMode = RuleMode.ROTATE,
     val defaultBreathingSeconds: Int = 8,
     val defaultCountdownSeconds: Int = 10,
     val lovedOnePhotoUri: String? = null,
@@ -64,6 +65,7 @@ data class GlobalInterventionSettings(
         InterventionType.BREATHING,
         InterventionType.REFLECTION,
         InterventionType.PHOTO,
+        InterventionType.VIDEO,
         InterventionType.ALTERNATIVES
     )
 )

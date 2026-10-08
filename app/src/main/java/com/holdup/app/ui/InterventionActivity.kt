@@ -132,34 +132,43 @@ fun InterventionScreen(
         val pool = (defaultReflections + customQ).filter { it !in dismissedQ }
         availableQuotes = if (pool.isNotEmpty()) pool else defaultReflections
         if (currentQuote.isEmpty() && availableQuotes.isNotEmpty()) {
-            currentQuote = availableQuotes[Random.nextInt(availableQuotes.size)]
+            currentQuote = prefs.getNextReflectionQuote(availableQuotes)
         }
 
         val rule = appRules[targetPackageName]
-        if (rule != null) {
-            when (rule.ruleMode) {
-                RuleMode.SPECIFIC -> {
-                    activeInterventionType = rule.specificType
-                }
-                RuleMode.SHUFFLE, RuleMode.SEQUENCE -> {
-                    val enabled = global.enabledInterventions.ifEmpty { listOf(InterventionType.BREATHING) }
-                    activeInterventionType = enabled[Random.nextInt(enabled.size)]
-                }
-            }
-            breathingSeconds = rule.breathingSeconds
-            countdownSeconds = rule.countdownSeconds
-            maxSessionMinutes = rule.maxSessionMinutes
-            photoUri = rule.customPhotoUri ?: global.lovedOnePhotoUri
-            photoCaption = rule.customPhotoCaption.ifBlank { global.lovedOneCaption }
-            videoUri = rule.customVideoUri ?: global.friendVideoUri
+        val activePhotoUri = rule?.customPhotoUri ?: global.lovedOnePhotoUri
+        val activeVideoUri = rule?.customVideoUri ?: global.friendVideoUri
+
+        photoUri = activePhotoUri
+        photoCaption = rule?.customPhotoCaption?.ifBlank { global.lovedOneCaption } ?: global.lovedOneCaption
+        videoUri = activeVideoUri
+        breathingSeconds = rule?.breathingSeconds ?: global.defaultBreathingSeconds
+        countdownSeconds = rule?.countdownSeconds ?: global.defaultCountdownSeconds
+        maxSessionMinutes = rule?.maxSessionMinutes ?: global.defaultSessionMinutes
+
+        if (rule != null && rule.ruleMode == RuleMode.SPECIFIC) {
+            activeInterventionType = rule.specificType
         } else {
-            val enabled = global.enabledInterventions.ifEmpty { listOf(InterventionType.BREATHING) }
-            activeInterventionType = enabled[Random.nextInt(enabled.size)]
-            breathingSeconds = global.defaultBreathingSeconds
-            countdownSeconds = global.defaultCountdownSeconds
-            photoUri = global.lovedOnePhotoUri
-            photoCaption = global.lovedOneCaption
-            videoUri = global.friendVideoUri
+            val mode = rule?.ruleMode ?: global.defaultRuleMode
+            val allPossibleTypes = listOf(
+                InterventionType.BREATHING,
+                InterventionType.REFLECTION,
+                InterventionType.ALTERNATIVES,
+                InterventionType.PHOTO,
+                InterventionType.VIDEO
+            )
+            // Filter eligible interventions: photo & video are automatically included when media is configured
+            val eligiblePool = allPossibleTypes.filter { type ->
+                when (type) {
+                    InterventionType.PHOTO -> !activePhotoUri.isNullOrBlank()
+                    InterventionType.VIDEO -> !activeVideoUri.isNullOrBlank()
+                    else -> global.enabledInterventions.contains(type)
+                }
+            }.ifEmpty {
+                listOf(InterventionType.BREATHING, InterventionType.REFLECTION, InterventionType.ALTERNATIVES)
+            }
+
+            activeInterventionType = prefs.getNextInterventionType(mode, eligiblePool)
         }
 
         if (activeInterventionType == InterventionType.REFLECTION ||
@@ -212,21 +221,18 @@ fun InterventionScreen(
                                 quote = currentQuote.ifEmpty { "Pause and take a deep breath." },
                                 onNextQuote = {
                                     if (availableQuotes.isNotEmpty()) {
-                                        val candidates = availableQuotes.filter { it != currentQuote }
-                                        currentQuote = if (candidates.isNotEmpty()) {
-                                            candidates[Random.nextInt(candidates.size)]
-                                        } else {
-                                            availableQuotes[Random.nextInt(availableQuotes.size)]
+                                        coroutineScope.launch {
+                                            currentQuote = prefs.getNextReflectionQuote(availableQuotes)
                                         }
                                     }
                                 },
                                 onDismissQuote = { dismissedText ->
                                     coroutineScope.launch {
                                         prefs.dismissReflection(dismissedText)
+                                        val remaining = availableQuotes.filter { it != dismissedText }
+                                        availableQuotes = if (remaining.isNotEmpty()) remaining else defaultReflections
+                                        currentQuote = prefs.getNextReflectionQuote(availableQuotes)
                                     }
-                                    val remaining = availableQuotes.filter { it != dismissedText }
-                                    availableQuotes = if (remaining.isNotEmpty()) remaining else defaultReflections
-                                    currentQuote = availableQuotes[Random.nextInt(availableQuotes.size)]
                                 }
                             )
                         }

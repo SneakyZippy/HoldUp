@@ -38,9 +38,28 @@ object InterventionTypeSerializer : KSerializer<InterventionType> {
     }
 }
 
-@Serializable
+@Serializable(with = RuleModeSerializer::class)
 enum class RuleMode(val displayName: String) {
-    SHUFFLE("Shuffle (Randomized)"),
+    ROTATE("Rotate (In Turn)"),
+    SHUFFLE("Shuffle (Balanced)"),
     SPECIFIC("Specific Intervention"),
     SEQUENCE("Multi-Step Pause")
+}
+
+object RuleModeSerializer : KSerializer<RuleMode> {
+    override val descriptor: SerialDescriptor =
+        PrimitiveSerialDescriptor("RuleMode", PrimitiveKind.STRING)
+
+    override fun serialize(encoder: Encoder, value: RuleMode) {
+        encoder.encodeString(value.name)
+    }
+
+    override fun deserialize(decoder: Decoder): RuleMode {
+        val name = decoder.decodeString()
+        return try {
+            RuleMode.valueOf(name)
+        } catch (_: Exception) {
+            RuleMode.ROTATE
+        }
+    }
 }

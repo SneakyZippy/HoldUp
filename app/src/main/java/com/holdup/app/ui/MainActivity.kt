@@ -46,6 +46,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import coil3.compose.AsyncImage
 import com.holdup.app.HoldUpApp
 import com.holdup.app.data.model.*
@@ -53,11 +55,13 @@ import com.holdup.app.service.HoldUpAccessibilityService
 import com.holdup.app.ui.components.AppIcon
 import com.holdup.app.ui.components.AppRuleBottomSheet
 import com.holdup.app.ui.components.QuotesManagementBottomSheet
+import com.holdup.app.ui.components.VideoPlayerView
 import com.holdup.app.ui.onboarding.OnboardingScreen
 import com.holdup.app.ui.theme.HoldUpTheme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.io.File
 
 class MainActivity : ComponentActivity() {
 
@@ -869,7 +873,13 @@ fun AppsTab(
                     val isChecked = monitoredPackages.contains(appItem.packageName)
                     val rule = perAppRules[appItem.packageName]
                     val scheduleLabel = rule?.schedulePreset?.displayName ?: "24/7"
-                    val styleLabel = if (rule?.ruleMode == RuleMode.SPECIFIC) rule.specificType.displayName else "Shuffle"
+                    val styleLabel = when (rule?.ruleMode) {
+                        RuleMode.SPECIFIC -> rule.specificType.displayName
+                        RuleMode.SHUFFLE -> "Shuffle"
+                        RuleMode.ROTATE -> "Rotate"
+                        RuleMode.SEQUENCE -> "Multi-Step"
+                        null -> "Rotate"
+                    }
 
                     Surface(
                         shape = RoundedCornerShape(20.dp),
@@ -951,18 +961,18 @@ fun InterventionsTab(
 ) {
     val context = LocalContext.current
     val haptic = LocalHapticFeedback.current
+    val coroutineScope = rememberCoroutineScope()
 
     val photoPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
         if (uri != null) {
-            try {
-                context.contentResolver.takePersistableUriPermission(
-                    uri,
-                    Intent.FLAG_GRANT_READ_URI_PERMISSION
-                )
-            } catch (_: Exception) {}
-            onSaveSettings(globalSettings.copy(lovedOnePhotoUri = uri.toString()))
+            coroutineScope.launch(Dispatchers.IO) {
+                val localPath = saveMediaToInternalStorage(context, uri, "loved_one_photo", "jpg")
+                if (localPath != null) {
+                    onSaveSettings(globalSettings.copy(lovedOnePhotoUri = localPath))
+                }
+            }
         }
     }
 
@@ -970,13 +980,38 @@ fun InterventionsTab(
         contract = ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
         if (uri != null) {
-            try {
-                context.contentResolver.takePersistableUriPermission(
-                    uri,
-                    Intent.FLAG_GRANT_READ_URI_PERMISSION
-                )
-            } catch (_: Exception) {}
-            onSaveSettings(globalSettings.copy(friendVideoUri = uri.toString()))
+            coroutineScope.launch(Dispatchers.IO) {
+                val localPath = saveMediaToInternalStorage(context, uri, "friend_video", "mp4")
+                if (localPath != null) {
+                    onSaveSettings(globalSettings.copy(friendVideoUri = localPath))
+                }
+            }
+        }
+    }
+
+    LaunchedEffect(globalSettings.friendVideoUri, globalSettings.lovedOnePhotoUri) {
+        withContext(Dispatchers.IO) {
+            var updated = globalSettings
+            var modified = false
+            val currentVideo = globalSettings.friendVideoUri
+            if (!currentVideo.isNullOrBlank() && currentVideo.startsWith("content://")) {
+                val local = saveMediaToInternalStorage(context, Uri.parse(currentVideo), "friend_video", "mp4")
+                if (local != null) {
+                    updated = updated.copy(friendVideoUri = local)
+                    modified = true
+                }
+            }
+            val currentPhoto = globalSettings.lovedOnePhotoUri
+            if (!currentPhoto.isNullOrBlank() && currentPhoto.startsWith("content://")) {
+                val local = saveMediaToInternalStorage(context, Uri.parse(currentPhoto), "loved_one_photo", "jpg")
+                if (local != null) {
+                    updated = updated.copy(lovedOnePhotoUri = local)
+                    modified = true
+                }
+            }
+            if (modified) {
+                onSaveSettings(updated)
+            }
         }
     }
 
@@ -995,9 +1030,210 @@ fun InterventionsTab(
                 style = MaterialTheme.typography.headlineLarge.copy(fontWeight = FontWeight.Bold)
             )
             Text(
-                text = "Customize your mindful pause and media cues",
+                text = "Customize your mindful pause, rotation style, and media cues",
                 style = MaterialTheme.typography.bodyMedium.copy(color = MaterialTheme.colorScheme.onSurfaceVariant)
             )
+        }
+
+        // Pause Variety & Rotation Card
+        item {
+            Surface(
+                shape = RoundedCornerShape(24.dp),
+                color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(20.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(text = "🔄", fontSize = 22.sp, modifier = Modifier.padding(end = 10.dp))
+                        Text(
+                            text = "Pause Variety & Rotation",
+                            style = MaterialTheme.typography.titleLarge.copy(
+                                fontSize = 17.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = "Control how different mindful actions are chosen when opening apps. Avoid repetitive streaks.",
+                        style = MaterialTheme.typography.bodyMedium.copy(
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    )
+                    Spacer(modifier = Modifier.height(14.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        val isRotate = globalSettings.defaultRuleMode == RuleMode.ROTATE
+                        Surface(
+                            shape = RoundedCornerShape(14.dp),
+                            color = if (isRotate) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerLowest,
+                            border = androidx.compose.foundation.BorderStroke(
+                                1.dp,
+                                if (isRotate) MaterialTheme.colorScheme.primary else Color.Transparent
+                            ),
+                            modifier = Modifier
+                                .weight(1f)
+                                .clip(RoundedCornerShape(14.dp))
+                                .clickable {
+                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                    onSaveSettings(globalSettings.copy(defaultRuleMode = RuleMode.ROTATE))
+                                }
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(vertical = 12.dp, horizontal = 10.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                Text(
+                                    text = "🔄 Rotate in Turn",
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (isRotate) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface
+                                )
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text(
+                                    text = "Even cycle, no streaks",
+                                    style = MaterialTheme.typography.labelSmall.copy(
+                                        fontSize = 11.sp,
+                                        color = if (isRotate) MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.75f) else MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                )
+                            }
+                        }
+
+                        val isShuffle = globalSettings.defaultRuleMode == RuleMode.SHUFFLE
+                        Surface(
+                            shape = RoundedCornerShape(14.dp),
+                            color = if (isShuffle) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceContainerLowest,
+                            border = androidx.compose.foundation.BorderStroke(
+                                1.dp,
+                                if (isShuffle) MaterialTheme.colorScheme.secondary else Color.Transparent
+                            ),
+                            modifier = Modifier
+                                .weight(1f)
+                                .clip(RoundedCornerShape(14.dp))
+                                .clickable {
+                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                    onSaveSettings(globalSettings.copy(defaultRuleMode = RuleMode.SHUFFLE))
+                                }
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(vertical = 12.dp, horizontal = 10.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                Text(
+                                    text = "🎲 Balanced Deck",
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (isShuffle) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.onSurface
+                                )
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text(
+                                    text = "Plays all before repeat",
+                                    style = MaterialTheme.typography.labelSmall.copy(
+                                        fontSize = 11.sp,
+                                        color = if (isShuffle) MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.75f) else MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                )
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(14.dp))
+
+                    val hasPhoto = !globalSettings.lovedOnePhotoUri.isNullOrBlank()
+                    val hasVideo = !globalSettings.friendVideoUri.isNullOrBlank()
+                    val activeCount = 3 + (if (hasPhoto) 1 else 0) + (if (hasVideo) 1 else 0)
+                    Text(
+                        text = "Active in rotation pool ($activeCount/5):",
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = MaterialTheme.colorScheme.primaryContainer
+                        ) {
+                            Text(
+                                text = "🌬️ Breathing",
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                style = MaterialTheme.typography.labelSmall.copy(
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                                )
+                            )
+                        }
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = MaterialTheme.colorScheme.primaryContainer
+                        ) {
+                            Text(
+                                text = "💭 Reflection",
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                style = MaterialTheme.typography.labelSmall.copy(
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                                )
+                            )
+                        }
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = MaterialTheme.colorScheme.primaryContainer
+                        ) {
+                            Text(
+                                text = "⚡ Swaps",
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                style = MaterialTheme.typography.labelSmall.copy(
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                                )
+                            )
+                        }
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = if (hasPhoto) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerLowest,
+                            border = androidx.compose.foundation.BorderStroke(
+                                1.dp,
+                                if (hasPhoto) MaterialTheme.colorScheme.primary.copy(alpha = 0.5f) else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
+                            )
+                        ) {
+                            Text(
+                                text = if (hasPhoto) "🖼️ Photo (Active)" else "🖼️ Photo (Not set)",
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                style = MaterialTheme.typography.labelSmall.copy(
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = if (hasPhoto) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            )
+                        }
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = if (hasVideo) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerLowest,
+                            border = androidx.compose.foundation.BorderStroke(
+                                1.dp,
+                                if (hasVideo) MaterialTheme.colorScheme.primary.copy(alpha = 0.5f) else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
+                            )
+                        ) {
+                            Text(
+                                text = if (hasVideo) "🎬 Video (Active)" else "🎬 Video (Not set)",
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                style = MaterialTheme.typography.labelSmall.copy(
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = if (hasVideo) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            )
+                        }
+                    }
+                }
+            }
         }
 
         // Breathing Duration Card
@@ -1113,6 +1349,19 @@ fun InterventionsTab(
                         }
 
                         if (globalSettings.lovedOnePhotoUri != null) {
+                            val photoModel = if (globalSettings.lovedOnePhotoUri.startsWith("/")) {
+                                File(globalSettings.lovedOnePhotoUri)
+                            } else {
+                                globalSettings.lovedOnePhotoUri
+                            }
+                            AsyncImage(
+                                model = photoModel,
+                                contentDescription = "Photo Thumbnail",
+                                modifier = Modifier
+                                    .size(42.dp)
+                                    .clip(RoundedCornerShape(10.dp)),
+                                contentScale = androidx.compose.ui.layout.ContentScale.Crop
+                            )
                             TextButton(onClick = { onSaveSettings(globalSettings.copy(lovedOnePhotoUri = null)) }) {
                                 Text("Remove", color = MaterialTheme.colorScheme.error)
                             }
@@ -1137,6 +1386,30 @@ fun InterventionsTab(
 
         // Friend's Video Message
         item {
+            var showVideoPreview by remember { mutableStateOf(false) }
+
+            if (showVideoPreview && globalSettings.friendVideoUri != null) {
+                AlertDialog(
+                    onDismissRequest = { showVideoPreview = false },
+                    title = { Text("Friend's Video Preview") },
+                    text = {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(260.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            VideoPlayerView(videoUriString = globalSettings.friendVideoUri)
+                        }
+                    },
+                    confirmButton = {
+                        Button(onClick = { showVideoPreview = false }) {
+                            Text("Done")
+                        }
+                    }
+                )
+            }
+
             Surface(
                 shape = RoundedCornerShape(24.dp),
                 color = MaterialTheme.colorScheme.surfaceContainerHigh,
@@ -1175,6 +1448,13 @@ fun InterventionsTab(
                         }
 
                         if (globalSettings.friendVideoUri != null) {
+                            OutlinedButton(
+                                onClick = { showVideoPreview = true },
+                                shape = RoundedCornerShape(14.dp)
+                            ) {
+                                Text("▶ Test")
+                            }
+
                             TextButton(onClick = { onSaveSettings(globalSettings.copy(friendVideoUri = null)) }) {
                                 Text("Remove", color = MaterialTheme.colorScheme.error)
                             }
@@ -1423,5 +1703,21 @@ private fun checkAccessibilityPermission(context: Context): Boolean {
                 enabledSetting.contains("HoldUpAccessibilityService", ignoreCase = true)
     } catch (_: Exception) {
         false
+    }
+}
+
+private fun saveMediaToInternalStorage(context: Context, sourceUri: Uri, prefix: String, extension: String): String? {
+    return try {
+        val destFile = File(context.filesDir, "${prefix}_${System.currentTimeMillis()}.$extension")
+        context.filesDir.listFiles { _, name -> name.startsWith(prefix) }?.forEach { it.delete() }
+        context.contentResolver.openInputStream(sourceUri)?.use { input ->
+            destFile.outputStream().use { output ->
+                input.copyTo(output)
+            }
+        }
+        destFile.absolutePath
+    } catch (e: Exception) {
+        android.util.Log.e("HoldUpMedia", "Failed to save media to internal storage", e)
+        null
     }
 }
