@@ -44,11 +44,21 @@ class HoldUpAccessibilityService : AccessibilityService() {
 
         val targetPackageName = event.packageName?.toString() ?: return
 
-        // Skip our own app or system launcher/systemui
-        if (targetPackageName == packageName ||
-            targetPackageName == "com.android.systemui" ||
+        // Skip our own app
+        if (targetPackageName == packageName) {
+            return
+        }
+
+        // Notify session monitor service of foreground package changes
+        SessionMonitorService.notifyForegroundPackage(targetPackageName)
+
+        // Skip system launcher or systemui for interception
+        if (targetPackageName == "com.android.systemui" ||
             targetPackageName.contains("launcher")
         ) {
+            if (targetPackageName.contains("launcher")) {
+                lastInterceptedPackage = null
+            }
             return
         }
 

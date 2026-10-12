@@ -40,6 +40,7 @@ class PreferencesManager(private val context: Context) {
         private val KEY_LAST_INTERVENTION_TYPE = stringPreferencesKey("last_intervention_type")
         private val KEY_SHUFFLE_BAG = stringPreferencesKey("shuffle_bag_json")
         private val KEY_LAST_REFLECTION_QUOTE = stringPreferencesKey("last_reflection_quote")
+        private val KEY_LAST_CHOSEN_DURATIONS = stringPreferencesKey("last_chosen_durations_json")
 
         // Popular doomscroll apps pre-populated as defaults
         val DEFAULT_TARGET_PACKAGES = setOf(
@@ -259,6 +260,29 @@ class PreferencesManager(private val context: Context) {
             }.toMutableMap()
             activeSessions.remove(packageName)
             prefs[KEY_ACTIVE_SESSIONS] = json.encodeToString(activeSessions)
+        }
+    }
+
+    suspend fun saveLastChosenDuration(packageName: String, minutes: Int) {
+        context.dataStore.edit { prefs ->
+            val current = try {
+                prefs[KEY_LAST_CHOSEN_DURATIONS]?.let { json.decodeFromString<Map<String, Int>>(it) } ?: emptyMap()
+            } catch (e: Exception) {
+                emptyMap()
+            }.toMutableMap()
+            current[packageName] = minutes
+            prefs[KEY_LAST_CHOSEN_DURATIONS] = json.encodeToString(current)
+        }
+    }
+
+    suspend fun getLastChosenDuration(packageName: String): Int? {
+        val prefs = context.dataStore.data.first()
+        val raw = prefs[KEY_LAST_CHOSEN_DURATIONS] ?: return null
+        return try {
+            val map = json.decodeFromString<Map<String, Int>>(raw)
+            map[packageName]
+        } catch (e: Exception) {
+            null
         }
     }
 
