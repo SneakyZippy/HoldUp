@@ -69,90 +69,64 @@ fun RealityCheckHeader(
             .padding(horizontal = 24.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        // App icon with gentle halo ring
+        // App icon with serene frosted glass halo
         Box(
             modifier = Modifier
-                .size(76.dp)
+                .size(72.dp)
                 .clip(CircleShape)
-                .background(
-                    Brush.radialGradient(
-                        colors = listOf(
-                            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.7f),
-                            MaterialTheme.colorScheme.surfaceContainer
-                        )
-                    )
-                ),
+                .background(Color.White.copy(alpha = 0.04f))
+                .border(1.dp, Color.White.copy(alpha = 0.08f), CircleShape),
             contentAlignment = Alignment.Center
         ) {
             AppIcon(
                 packageName = packageName,
-                size = 54.dp,
+                size = 48.dp,
                 modifier = Modifier
-                    .clip(RoundedCornerShape(16.dp))
-                    .shadow(8.dp, RoundedCornerShape(16.dp))
+                    .clip(RoundedCornerShape(14.dp))
             )
         }
 
         Spacer(modifier = Modifier.height(14.dp))
 
-        Surface(
-            shape = RoundedCornerShape(30.dp),
-            color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f),
-            modifier = Modifier.padding(bottom = 6.dp)
-        ) {
-            Row(
-                modifier = Modifier.padding(horizontal = 14.dp, vertical = 5.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = "HOLD UP",
-                    style = MaterialTheme.typography.labelSmall.copy(
-                        letterSpacing = 2.5.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                )
-            }
-        }
-
         Text(
             text = "Opening $appName",
             style = MaterialTheme.typography.headlineMedium.copy(
                 fontWeight = FontWeight.SemiBold,
+                fontSize = 22.sp,
+                letterSpacing = (-0.3).sp,
                 color = MaterialTheme.colorScheme.onBackground
             )
         )
 
         Spacer(modifier = Modifier.height(8.dp))
 
+        // Minimalist Usage / Status Pill
         Surface(
-            shape = RoundedCornerShape(24.dp),
-            color = MaterialTheme.colorScheme.surfaceContainerHigh,
-            border = androidx.compose.foundation.BorderStroke(
-                1.dp,
-                MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
-            )
+            shape = RoundedCornerShape(20.dp),
+            color = Color.White.copy(alpha = 0.04f),
+            border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.08f))
         ) {
             Row(
                 modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(
-                    imageVector = Icons.Default.HourglassBottom,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(14.dp)
+                Box(
+                    modifier = Modifier
+                        .size(6.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.primary)
                 )
-                Spacer(modifier = Modifier.width(6.dp))
+                Spacer(modifier = Modifier.width(8.dp))
                 Text(
                     text = if (todayUsageMinutes > 0) {
-                        "Today: ${todayUsageMinutes}m spent here"
+                        "${todayUsageMinutes}m spent today • Take a breath"
                     } else {
-                        "Mindful Moment"
+                        "Take a mindful breath"
                     },
                     style = MaterialTheme.typography.labelSmall.copy(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        fontWeight = FontWeight.Medium
+                        fontWeight = FontWeight.Medium,
+                        letterSpacing = 0.2.sp
                     )
                 )
             }

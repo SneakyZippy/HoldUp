@@ -41,6 +41,10 @@ class PreferencesManager(private val context: Context) {
         private val KEY_SHUFFLE_BAG = stringPreferencesKey("shuffle_bag_json")
         private val KEY_LAST_REFLECTION_QUOTE = stringPreferencesKey("last_reflection_quote")
         private val KEY_LAST_CHOSEN_DURATIONS = stringPreferencesKey("last_chosen_durations_json")
+        private val KEY_CHILD_SAFETY_ENABLED = booleanPreferencesKey("child_safety_enabled")
+        private val KEY_PARENT_PIN_HASH = stringPreferencesKey("parent_pin_hash")
+        private val KEY_PARENT_PIN_SALT = stringPreferencesKey("parent_pin_salt")
+        private val KEY_TEMP_SETTINGS_UNLOCK_UNTIL = longPreferencesKey("temp_settings_unlock_until")
 
         // Popular doomscroll apps pre-populated as defaults
         val DEFAULT_TARGET_PACKAGES = setOf(
@@ -96,7 +100,14 @@ class PreferencesManager(private val context: Context) {
         val raw = prefs[KEY_CUSTOM_ACTIVITIES]
         if (!raw.isNullOrBlank()) {
             try {
-                json.decodeFromString<List<AlternativeActivity>>(raw)
+                val saved = json.decodeFromString<List<AlternativeActivity>>(raw)
+                val savedIds = saved.map { it.id }.toSet()
+                val missingDefaults = defaultAlternativeActivities.filter { it.id !in savedIds }
+                if (missingDefaults.isNotEmpty()) {
+                    saved + missingDefaults
+                } else {
+                    saved
+                }
             } catch (e: Exception) {
                 defaultAlternativeActivities
             }
@@ -125,6 +136,18 @@ class PreferencesManager(private val context: Context) {
                 lifetimePoints = lifetime
             )
         }
+    }
+
+    val isChildSafetyEnabled: Flow<Boolean> = context.dataStore.data.map { prefs ->
+        prefs[KEY_CHILD_SAFETY_ENABLED] ?: false
+    }
+
+    val hasParentPin: Flow<Boolean> = context.dataStore.data.map { prefs ->
+        !prefs[KEY_PARENT_PIN_HASH].isNullOrBlank()
+    }
+
+    val tempSettingsUnlockUntil: Flow<Long> = context.dataStore.data.map { prefs ->
+        prefs[KEY_TEMP_SETTINGS_UNLOCK_UNTIL] ?: 0L
     }
 
     suspend fun setMonitoringEnabled(enabled: Boolean) {
@@ -340,6 +363,53 @@ class PreferencesManager(private val context: Context) {
         }
     }
 
+    suspend fun saveAlternativeActivities(activities: List<AlternativeActivity>) {
+        context.dataStore.edit { prefs ->
+            prefs[KEY_CUSTOM_ACTIVITIES] = json.encodeToString(activities)
+        }
+    }
+
+    suspend fun toggleAlternativeActivity(id: String) {
+        val current = alternativeActivities.first()
+        val updated = current.map { activity ->
+            if (activity.id == id) activity.copy(isEnabled = !activity.isEnabled) else activity
+        }
+        saveAlternativeActivities(updated)
+    }
+
+    suspend fun addAlternativeActivity(title: String, emoji: String, category: String = "Custom") {
+        val current = alternativeActivities.first()
+        val newActivity = AlternativeActivity(
+            id = "custom_${System.currentTimeMillis()}",
+            title = title.trim(),
+            iconEmoji = emoji.ifBlank { "✨" },
+            category = category,
+            isEnabled = true,
+            isCustom = true
+        )
+        saveAlternativeActivities(listOf(newActivity) + current)
+    }
+
+    suspend fun updateAlternativeActivity(id: String, newTitle: String, newEmoji: String) {
+        val current = alternativeActivities.first()
+        val updated = current.map { activity ->
+            if (activity.id == id) activity.copy(title = newTitle.trim(), iconEmoji = newEmoji.ifBlank { activity.iconEmoji }) else activity
+        }
+        saveAlternativeActivities(updated)
+    }
+
+    suspend fun deleteAlternativeActivity(id: String) {
+        val current = alternativeActivities.first()
+        val updated = current.filter { it.id != id }
+        saveAlternativeActivities(updated)
+    }
+
+    suspend fun setAllAlternativeActivitiesEnabled(enabled: Boolean) {
+        val current = alternativeActivities.first()
+        val updated = current.map { it.copy(isEnabled = enabled) }
+        saveAlternativeActivities(updated)
+    }
+
     suspend fun getNextInterventionType(
         mode: RuleMode,
         eligibleTypes: List<InterventionType>
@@ -391,6 +461,9 @@ class PreferencesManager(private val context: Context) {
 
                 eligibleTypes.firstOrNull { it.name == chosenName } ?: eligibleTypes.first()
             }
+            RuleMode.RANDOM -> {
+                eligibleTypes.random()
+            }
             RuleMode.SPECIFIC -> {
                 eligibleTypes.first()
             }
@@ -422,5 +495,51 @@ class PreferencesManager(private val context: Context) {
         }
 
         return chosen
+    }
+
+    private fun hashPin(pin: String, salt: String): String {
+        val md = java.security.MessageDigest.getInstance("SHA-256")
+        val bytes = md.digest((salt + pin).toByteArray(Charsets.UTF_8))
+        return bytes.joinToString("") { "%02x".format(it) }
+    }
+
+    suspend fun setChildSafetyEnabled(enabled: Boolean) {
+        context.dataStore.edit { prefs ->
+            prefs[KEY_CHILD_SAFETY_ENABLED] = enabled
+        }
+    }
+
+    suspend fun setParentPin(pin: String) {
+        val random = java.security.SecureRandom()
+        val saltBytes = ByteArray(16)
+        random.nextBytes(saltBytes)
+        val salt = saltBytes.joinToString("") { "%02x".format(it) }
+        val hash = hashPin(pin, salt)
+
+        context.dataStore.edit { prefs ->
+            prefs[KEY_PARENT_PIN_SALT] = salt
+            prefs[KEY_PARENT_PIN_HASH] = hash
+        }
+    }
+
+    suspend fun verifyParentPin(pin: String): Boolean {
+        val prefs = context.dataStore.data.first()
+        val salt = prefs[KEY_PARENT_PIN_SALT] ?: return false
+        val savedHash = prefs[KEY_PARENT_PIN_HASH] ?: return false
+        val computed = hashPin(pin, salt)
+        return computed.equals(savedHash, ignoreCase = true)
+    }
+
+    suspend fun unlockSettingsTemporarily(minutes: Int = 5) {
+        val until = System.currentTimeMillis() + (minutes * 60 * 1000L)
+        context.dataStore.edit { prefs ->
+            prefs[KEY_TEMP_SETTINGS_UNLOCK_UNTIL] = until
+        }
+    }
+
+    suspend fun isSettingsTemporarilyUnlocked(): Boolean {
+        val prefs = context.dataStore.data.first()
+        val until = prefs[KEY_TEMP_SETTINGS_UNLOCK_UNTIL] ?: 0L
+        return System.currentTimeMillis() < until
     }
 }

@@ -36,6 +36,9 @@ import com.holdup.app.service.HoldUpAccessibilityService
 import com.holdup.app.service.SessionMonitorService
 import com.holdup.app.ui.components.*
 import com.holdup.app.ui.theme.*
+import android.content.Intent
+import android.widget.Toast
+import androidx.compose.foundation.shape.CircleShape
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlin.random.Random
@@ -45,20 +48,49 @@ class InterventionActivity : ComponentActivity() {
     companion object {
         const val EXTRA_PACKAGE_NAME = "extra_package_name"
         const val EXTRA_IS_SOFT_NUDGE = "extra_is_soft_nudge"
+        const val EXTRA_IS_TEST_MODE = "extra_is_test_mode"
+        const val EXTRA_TEST_INTERVENTION_TYPE = "extra_test_intervention_type"
+
+        fun startTest(context: Context, type: InterventionType, targetPackage: String = "com.google.android.youtube") {
+            val intent = Intent(context, InterventionActivity::class.java).apply {
+                putExtra(EXTRA_PACKAGE_NAME, targetPackage)
+                putExtra(EXTRA_IS_TEST_MODE, true)
+                putExtra(EXTRA_TEST_INTERVENTION_TYPE, type.name)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            context.startActivity(intent)
+        }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        val targetPackage = intent.getStringExtra(EXTRA_PACKAGE_NAME) ?: ""
+        val isTestMode = intent.getBooleanExtra(EXTRA_IS_TEST_MODE, false)
+        val rawPackage = intent.getStringExtra(EXTRA_PACKAGE_NAME) ?: ""
+        val targetPackage = if (rawPackage.isBlank() && isTestMode) "com.google.android.youtube" else rawPackage
         val isSoftNudge = intent.getBooleanExtra(EXTRA_IS_SOFT_NUDGE, false)
+        val testTypeName = intent.getStringExtra(EXTRA_TEST_INTERVENTION_TYPE)
+        val testType = testTypeName?.let {
+            try { InterventionType.valueOf(it) } catch (_: Exception) { null }
+        }
 
         setContent {
             HoldUpTheme {
                 InterventionScreen(
                     targetPackageName = targetPackage,
                     isSoftNudge = isSoftNudge,
+                    isTestMode = isTestMode,
+                    testType = testType,
                     onWalkAway = { isAlternative ->
+                        if (isTestMode) {
+                            Toast.makeText(
+                                this@InterventionActivity,
+                                "Test complete: Walk Away (+15 mindful pts)",
+                                Toast.LENGTH_SHORT
+                            ).show()
+                            finishAndRemoveTask()
+                            return@InterventionScreen
+                        }
                         val scope = (application as HoldUpApp).preferencesManager
                         // Log mindful win with points
                         kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
@@ -76,6 +108,15 @@ class InterventionActivity : ComponentActivity() {
                         finishAndRemoveTask()
                     },
                     onOpenSession = { minutes ->
+                        if (isTestMode) {
+                            Toast.makeText(
+                                this@InterventionActivity,
+                                "Test complete: ${minutes}m session selected",
+                                Toast.LENGTH_SHORT
+                            ).show()
+                            finishAndRemoveTask()
+                            return@InterventionScreen
+                        }
                         val scope = (application as HoldUpApp).preferencesManager
                         kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
                             scope.recordProceedSession(targetPackage, minutes)
@@ -108,6 +149,8 @@ class InterventionActivity : ComponentActivity() {
 fun InterventionScreen(
     targetPackageName: String,
     isSoftNudge: Boolean,
+    isTestMode: Boolean = false,
+    testType: InterventionType? = null,
     onWalkAway: (Boolean) -> Unit,
     onOpenSession: (Int) -> Unit
 ) {
@@ -120,7 +163,8 @@ fun InterventionScreen(
     var photoUri by remember { mutableStateOf<String?>(null) }
     var photoCaption by remember { mutableStateOf("Remember what truly matters to you.") }
     var videoUri by remember { mutableStateOf<String?>(null) }
-    var alternativeActivities by remember { mutableStateOf<List<AlternativeActivity>>(defaultAlternativeActivities) }
+    var allAlternativeActivities by remember { mutableStateOf<List<AlternativeActivity>>(defaultAlternativeActivities) }
+    var displayedAlternatives by remember { mutableStateOf<List<AlternativeActivity>>(emptyList()) }
     var selectedAlternative by remember { mutableStateOf<AlternativeActivity?>(null) }
     var maxSessionMinutes by remember { mutableIntStateOf(15) }
 
@@ -133,7 +177,9 @@ fun InterventionScreen(
         val global = prefs.globalSettings.first()
         val appRules = prefs.perAppRules.first()
         val activities = prefs.alternativeActivities.first()
-        alternativeActivities = activities
+        allAlternativeActivities = activities
+        val activePool = activities.filter { it.isEnabled }.ifEmpty { activities }
+        displayedAlternatives = activePool.shuffled().take(3)
 
         val customQ = prefs.customReflections.first()
         val dismissedQ = prefs.dismissedReflections.first()
@@ -155,7 +201,9 @@ fun InterventionScreen(
         val rememberedDuration = prefs.getLastChosenDuration(targetPackageName)
         maxSessionMinutes = rememberedDuration ?: rule?.maxSessionMinutes ?: global.defaultSessionMinutes
 
-        if (rule != null && rule.ruleMode == RuleMode.SPECIFIC) {
+        if (testType != null) {
+            activeInterventionType = testType
+        } else if (rule != null && rule.ruleMode == RuleMode.SPECIFIC) {
             activeInterventionType = rule.specificType
         } else {
             val mode = rule?.ruleMode ?: global.defaultRuleMode
@@ -187,6 +235,12 @@ fun InterventionScreen(
         }
     }
 
+    if (isTestMode) {
+        BackHandler {
+            onWalkAway(false)
+        }
+    }
+
     val context = androidx.compose.ui.platform.LocalContext.current
     LaunchedEffect(isSoftNudge) {
         if (isSoftNudge) {
@@ -208,7 +262,47 @@ fun InterventionScreen(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.SpaceBetween
         ) {
-            // Header: Reality Check or Soft Nudge banner
+            // Header: Live Preview Pill, Reality Check or Soft Nudge banner
+            if (isTestMode) {
+                Surface(
+                    shape = RoundedCornerShape(20.dp),
+                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.45f)),
+                    modifier = Modifier.padding(bottom = 12.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "🧪 Live Preview • ${activeInterventionType.displayName}",
+                            style = MaterialTheme.typography.labelSmall.copy(
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        )
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Surface(
+                            shape = CircleShape,
+                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.25f),
+                            modifier = Modifier
+                                .size(20.dp)
+                                .clip(CircleShape)
+                                .clickable { onWalkAway(false) }
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    imageVector = Icons.Default.Close,
+                                    contentDescription = "Exit Preview",
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(12.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
             if (isSoftNudge) {
                 SoftNudgeHeader(targetPackageName = targetPackageName)
             } else {
@@ -267,11 +361,15 @@ fun InterventionScreen(
                         }
                         InterventionType.ALTERNATIVES -> {
                             AlternativesList(
-                                activities = alternativeActivities,
+                                activities = displayedAlternatives.ifEmpty { allAlternativeActivities.take(3) },
                                 selectedActivity = selectedAlternative,
                                 onSelectActivity = {
                                     selectedAlternative = if (selectedAlternative?.id == it.id) null else it
                                     isInterventionCompleted = true
+                                },
+                                onShuffle = {
+                                    val activePool = allAlternativeActivities.filter { it.isEnabled }.ifEmpty { allAlternativeActivities }
+                                    displayedAlternatives = activePool.shuffled().take(3)
                                 }
                             )
                         }
@@ -410,29 +508,31 @@ fun DecisionFooter(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 24.dp),
+                .padding(horizontal = 20.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             when (step) {
                 DecisionStep.ASK_ENTER -> {
                     Text(
-                        text = if (isSoftNudge) "Do you really want to continue?" else "Do you really want to enter?",
+                        text = if (isSoftNudge) "Ready to step back?" else "Still want to enter?",
                         style = MaterialTheme.typography.titleLarge.copy(
-                            fontWeight = FontWeight.Bold,
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize = 20.sp,
+                            letterSpacing = (-0.2).sp,
                             color = MaterialTheme.colorScheme.onSurface
                         ),
                         textAlign = androidx.compose.ui.text.style.TextAlign.Center
                     )
 
-                    Spacer(modifier = Modifier.height(6.dp))
+                    Spacer(modifier = Modifier.height(4.dp))
 
                     Text(
                         text = if (isSoftNudge) {
-                            "Your session ended. Pause and decide if you want to keep going."
+                            "Your planned session has ended. Step away for clarity."
                         } else if (selectedAlternative != null) {
-                            "You picked: ${selectedAlternative.title}"
+                            "Selected: ${selectedAlternative.title}"
                         } else {
-                            "Pause and ask yourself if this is intentional."
+                            "Give yourself the gift of intentional presence."
                         },
                         style = MaterialTheme.typography.bodyMedium.copy(
                             color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -452,55 +552,61 @@ fun DecisionFooter(
                             containerColor = MaterialTheme.colorScheme.primary,
                             contentColor = MaterialTheme.colorScheme.onPrimary
                         ),
-                        shape = RoundedCornerShape(26.dp),
+                        shape = RoundedCornerShape(20.dp),
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(56.dp)
+                            .height(54.dp)
                     ) {
-                        Icon(imageVector = Icons.Default.Check, contentDescription = null)
-                        Spacer(modifier = Modifier.width(10.dp))
+                        Icon(imageVector = Icons.Default.Check, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
                         Text(
                             text = if (selectedAlternative != null) {
                                 "${selectedAlternative.title} (+20 pts)"
                             } else {
-                                "No, Walk Away (+10 pts)"
+                                "Walk Away (+10 pts)"
                             },
-                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold)
+                            style = MaterialTheme.typography.titleMedium.copy(
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 15.sp
+                            )
                         )
                     }
 
-                    Spacer(modifier = Modifier.height(12.dp))
+                    Spacer(modifier = Modifier.height(10.dp))
 
                     // Secondary Choice: Yes -> advances to slider
-                    OutlinedButton(
-                        onClick = {
-                            haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
-                            currentStep = DecisionStep.CHOOSE_DURATION
-                        },
-                        shape = RoundedCornerShape(26.dp),
-                        border = androidx.compose.foundation.BorderStroke(
-                            1.5.dp,
-                            MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
-                        ),
+                    Surface(
+                        shape = RoundedCornerShape(20.dp),
+                        color = Color.White.copy(alpha = 0.04f),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.08f)),
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(52.dp)
+                            .height(50.dp)
+                            .clip(RoundedCornerShape(20.dp))
+                            .clickable {
+                                haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
+                                currentStep = DecisionStep.CHOOSE_DURATION
+                            }
                     ) {
-                        Text(
-                            text = if (appName.isNotBlank()) "Yes, enter $appName" else "Yes",
-                            style = MaterialTheme.typography.bodyLarge.copy(
-                                fontWeight = FontWeight.Medium,
-                                color = MaterialTheme.colorScheme.onSurface
+                        Box(contentAlignment = Alignment.Center) {
+                            Text(
+                                text = if (appName.isNotBlank()) "Open $appName mindfully" else "Continue mindfully",
+                                style = MaterialTheme.typography.bodyMedium.copy(
+                                    fontWeight = FontWeight.Medium,
+                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.85f)
+                                )
                             )
-                        )
+                        }
                     }
                 }
 
                 DecisionStep.CHOOSE_DURATION -> {
                     Text(
-                        text = "How long?",
+                        text = "Set Intended Time",
                         style = MaterialTheme.typography.titleLarge.copy(
-                            fontWeight = FontWeight.Bold,
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize = 20.sp,
+                            letterSpacing = (-0.2).sp,
                             color = MaterialTheme.colorScheme.onSurface
                         ),
                         textAlign = androidx.compose.ui.text.style.TextAlign.Center
@@ -509,7 +615,7 @@ fun DecisionFooter(
                     Spacer(modifier = Modifier.height(4.dp))
 
                     Text(
-                        text = "Choose how long it should go without a break",
+                        text = "A gentle nudge will sound when time is up",
                         style = MaterialTheme.typography.bodyMedium.copy(
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         ),
@@ -520,15 +626,12 @@ fun DecisionFooter(
 
                     // Readout badge
                     Surface(
-                        shape = RoundedCornerShape(20.dp),
-                        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f),
-                        border = androidx.compose.foundation.BorderStroke(
-                            1.dp,
-                            MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)
-                        )
+                        shape = RoundedCornerShape(18.dp),
+                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.25f))
                     ) {
                         Row(
-                            modifier = Modifier.padding(horizontal = 22.dp, vertical = 8.dp),
+                            modifier = Modifier.padding(horizontal = 20.dp, vertical = 6.dp),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.Center
                         ) {
@@ -541,10 +644,10 @@ fun DecisionFooter(
                             )
                             Spacer(modifier = Modifier.width(6.dp))
                             Text(
-                                text = if (selectedMinutes == 1) "min without a break" else "mins without a break",
+                                text = if (selectedMinutes == 1) "minute session" else "minutes session",
                                 style = MaterialTheme.typography.bodyMedium.copy(
                                     fontWeight = FontWeight.Medium,
-                                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                                    color = MaterialTheme.colorScheme.primary
                                 )
                             )
                         }
@@ -568,7 +671,7 @@ fun DecisionFooter(
                         colors = SliderDefaults.colors(
                             thumbColor = MaterialTheme.colorScheme.primary,
                             activeTrackColor = MaterialTheme.colorScheme.primary,
-                            inactiveTrackColor = MaterialTheme.colorScheme.surfaceContainerHighest
+                            inactiveTrackColor = Color.White.copy(alpha = 0.08f)
                         ),
                         modifier = Modifier.fillMaxWidth()
                     )
@@ -582,10 +685,14 @@ fun DecisionFooter(
                             val isSelected = selectedMinutes == preset
                             Surface(
                                 shape = RoundedCornerShape(12.dp),
-                                color = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHigh,
+                                color = if (isSelected) {
+                                    MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
+                                } else {
+                                    Color.White.copy(alpha = 0.04f)
+                                },
                                 border = androidx.compose.foundation.BorderStroke(
                                     1.dp,
-                                    if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.25f)
+                                    if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.5f) else Color.White.copy(alpha = 0.06f)
                                 ),
                                 modifier = Modifier
                                     .weight(1f)
@@ -597,14 +704,14 @@ fun DecisionFooter(
                                     }
                             ) {
                                 Box(
-                                    modifier = Modifier.padding(vertical = 7.dp),
+                                    modifier = Modifier.padding(vertical = 8.dp),
                                     contentAlignment = Alignment.Center
                                 ) {
                                     Text(
                                         text = "${preset}m",
                                         style = MaterialTheme.typography.labelMedium.copy(
                                             fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                                            color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
+                                            color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
                                         )
                                     )
                                 }
@@ -624,14 +731,17 @@ fun DecisionFooter(
                             containerColor = MaterialTheme.colorScheme.primary,
                             contentColor = MaterialTheme.colorScheme.onPrimary
                         ),
-                        shape = RoundedCornerShape(26.dp),
+                        shape = RoundedCornerShape(20.dp),
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(56.dp)
+                            .height(54.dp)
                     ) {
                         Text(
                             text = if (isSoftNudge) "Continue for $selectedMinutes min" else "Enter for $selectedMinutes min",
-                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold)
+                            style = MaterialTheme.typography.titleMedium.copy(
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 15.sp
+                            )
                         )
                     }
 

@@ -22,17 +22,27 @@ private val DarkColorScheme = darkColorScheme(
     secondaryContainer = ZenLavenderContainer,
     onSecondaryContainer = ZenLavender,
     tertiary = ZenCoral,
+    onTertiary = ZenBackground,
+    tertiaryContainer = ZenCoralContainer,
+    onTertiaryContainer = ZenCoral,
     background = ZenBackground,
     onBackground = ZenTextPrimary,
     surface = ZenSurface,
     onSurface = ZenTextPrimary,
     surfaceVariant = ZenSurfaceVariant,
-    onSurfaceVariant = ZenTextSecondary
+    onSurfaceVariant = ZenTextSecondary,
+    surfaceContainerLowest = ZenSurfaceContainerLowest,
+    surfaceContainerLow = ZenSurfaceContainerLow,
+    surfaceContainer = ZenSurfaceContainer,
+    surfaceContainerHigh = ZenSurfaceContainerHigh,
+    surfaceContainerHighest = ZenSurfaceContainerHighest,
+    outline = ZenBorderStrong,
+    outlineVariant = ZenBorder
 )
 
 @Composable
 fun HoldUpTheme(
-    dynamicColor: Boolean = true,
+    dynamicColor: Boolean = false,
     content: @Composable () -> Unit
 ) {
     val context = LocalContext.current
