@@ -1,0 +1,445 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>HoldUp – Closed Testing Invitation</title>
+  <link rel="icon" type="image/png" href="icon.png">
+  <meta name="theme-color" content="#090A0D">
+  <meta name="description" content="Werde Tester für HoldUp – Achtsamkeit für deine Bildschirmzeit. Schritt-für-Schritt Anleitung für den Google Play Closed Beta Test.">
+
+  <!-- Open Graph / Meta -->
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="HoldUp – Teste die Android App">
+  <meta property="og:description" content="Schritt 1: Google Gruppe beitreten. Schritt 2: App im Google Play Store testen.">
+  <meta property="og:image" content="icon.png">
+
+  <style>
+    :root {
+      --bg: #090A0D;
+      --surface: #121419;
+      --surface-elevated: #181B23;
+      --border: rgba(255, 255, 255, 0.08);
+      --border-strong: rgba(255, 255, 255, 0.16);
+      --primary: #4EE1A0;
+      --primary-dim: #36B37E;
+      --primary-container: rgba(78, 225, 160, 0.12);
+      --accent: #A594F9;
+      --accent-container: rgba(165, 148, 249, 0.12);
+      --text: #F7F9FC;
+      --text-muted: #9096A5;
+      --text-dim: #5E6573;
+      --card-radius: 20px;
+      --btn-radius: 14px;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    body {
+      background-color: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 32px 18px 48px;
+    }
+
+    .container {
+      width: 100%;
+      max-width: 540px;
+      margin: 0 auto;
+    }
+
+    /* Header */
+    .header {
+      text-align: center;
+      margin-bottom: 32px;
+    }
+
+    .app-icon {
+      width: 88px;
+      height: 88px;
+      border-radius: 22px;
+      margin-bottom: 16px;
+      box-shadow: 0 12px 30px rgba(0, 0, 0, 0.6), 0 0 0 1px var(--border-strong);
+      object-fit: cover;
+    }
+
+    .app-title {
+      font-size: 28px;
+      font-weight: 700;
+      letter-spacing: -0.5px;
+      color: var(--text);
+      margin-bottom: 6px;
+    }
+
+    .tagline {
+      font-size: 15px;
+      color: var(--text-muted);
+      line-height: 1.4;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 12px;
+      background: var(--primary-container);
+      color: var(--primary);
+      border: 1px solid rgba(78, 225, 160, 0.25);
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 0.3px;
+      text-transform: uppercase;
+      margin-top: 12px;
+    }
+
+    .badge-dot {
+      width: 6px;
+      height: 6px;
+      background: var(--primary);
+      border-radius: 50%;
+      box-shadow: 0 0 8px var(--primary);
+    }
+
+    /* Step Cards */
+    .steps {
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+      margin-bottom: 24px;
+    }
+
+    .step-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--card-radius);
+      padding: 22px;
+      position: relative;
+      overflow: hidden;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+      transition: transform 0.15s ease, border-color 0.15s ease;
+    }
+
+    .step-card:hover {
+      border-color: var(--border-strong);
+    }
+
+    .step-header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+
+    .step-number {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      background: var(--surface-elevated);
+      color: var(--primary);
+      font-weight: 700;
+      font-size: 14px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border: 1px solid var(--border);
+    }
+
+    .step-card.step-2 .step-number {
+      color: var(--accent);
+    }
+
+    .step-title {
+      font-size: 17px;
+      font-weight: 600;
+      color: var(--text);
+    }
+
+    .step-desc {
+      font-size: 14px;
+      color: var(--text-muted);
+      line-height: 1.5;
+      margin-bottom: 18px;
+    }
+
+    .step-desc b {
+      color: var(--text);
+    }
+
+    /* Buttons */
+    .btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      width: 100%;
+      padding: 14px 18px;
+      border-radius: var(--btn-radius);
+      font-size: 15px;
+      font-weight: 600;
+      text-decoration: none;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      border: none;
+    }
+
+    .btn-primary {
+      background: var(--primary);
+      color: #090A0D;
+    }
+
+    .btn-primary:hover {
+      background: #42cc90;
+      box-shadow: 0 4px 16px rgba(78, 225, 160, 0.35);
+    }
+
+    .btn-accent {
+      background: var(--accent);
+      color: #090A0D;
+    }
+
+    .btn-accent:hover {
+      background: #927ef5;
+      box-shadow: 0 4px 16px rgba(165, 148, 249, 0.35);
+    }
+
+    .btn-secondary {
+      background: var(--surface-elevated);
+      color: var(--text);
+      border: 1px solid var(--border);
+      margin-top: 10px;
+      font-size: 14px;
+      padding: 12px 16px;
+    }
+
+    .btn-secondary:hover {
+      border-color: var(--border-strong);
+      background: #1f232e;
+    }
+
+    .btn svg {
+      width: 18px;
+      height: 18px;
+      flex-shrink: 0;
+    }
+
+    /* Info Callout */
+    .callout {
+      background: rgba(165, 148, 249, 0.08);
+      border: 1px dashed rgba(165, 148, 249, 0.25);
+      border-radius: 14px;
+      padding: 14px 16px;
+      font-size: 13px;
+      color: #d2caff;
+      line-height: 1.5;
+      margin-bottom: 24px;
+    }
+
+    .callout strong {
+      color: #fff;
+    }
+
+    /* FAQ / Troubleshooting */
+    .faq {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--card-radius);
+      padding: 20px;
+      margin-bottom: 24px;
+    }
+
+    .faq-title {
+      font-size: 14px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: var(--text-dim);
+      margin-bottom: 12px;
+    }
+
+    .faq-item {
+      font-size: 13.5px;
+      color: var(--text-muted);
+      line-height: 1.5;
+      margin-bottom: 12px;
+    }
+
+    .faq-item:last-child {
+      margin-bottom: 0;
+    }
+
+    .faq-item strong {
+      color: var(--text);
+      display: block;
+      margin-bottom: 3px;
+    }
+
+    /* Footer */
+    .footer {
+      text-align: center;
+      margin-top: auto;
+      font-size: 13px;
+      color: var(--text-dim);
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .footer a {
+      color: var(--text-muted);
+      text-decoration: none;
+      transition: color 0.15s;
+    }
+
+    .footer a:hover {
+      color: var(--primary);
+    }
+
+    .release-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      margin-top: 4px;
+      font-size: 12.5px;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="container">
+
+    <!-- Header -->
+    <header class="header">
+      <img src="icon.png" alt="HoldUp Icon" class="app-icon">
+      <h1 class="app-title">HoldUp</h1>
+      <p class="tagline">Pause before you scroll • Mindful digital habits</p>
+      <div class="badge">
+        <span class="badge-dot"></span>
+        Closed Beta Testing
+      </div>
+    </header>
+
+    <!-- Share button -->
+    <div style="text-align: center; margin-bottom: 24px;">
+      <button id="copy-btn" onclick="copyShareText()" class="btn btn-secondary" style="display: inline-flex; width: auto; padding: 8px 18px; margin: 0 auto; font-size: 13px; border-radius: 999px;">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 15px; height: 15px;">
+          <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+          <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+        </svg>
+        <span id="copy-text">Einladungs-Link kopieren</span>
+      </button>
+    </div>
+
+    <!-- Important Notice -->
+    <div class="callout">
+      <strong>⚠️ Wichtig für den Google Play Test:</strong><br>
+      Damit der Google Play Store den Download freischaltet, musst du zuerst der Google Gruppe beitreten – und zwar mit dem <strong>gleichen Google-Konto</strong>, das du auf deinem Smartphone im Play Store nutzt.
+    </div>
+
+    <!-- Steps -->
+    <main class="steps">
+
+      <!-- Step 1: Google Group -->
+      <section class="step-card">
+        <div class="step-header">
+          <div class="step-number">1</div>
+          <h2 class="step-title">Google Gruppe beitreten</h2>
+        </div>
+        <p class="step-desc">
+          Google schützt geschlossene Tests. Tritt einfach unserer Tester-Gruppe bei (ein Klick auf <i>"Gruppe beitreten"</i> genügt).
+        </p>
+        <!-- HIER DEN GOOGLE GROUP LINK EINTRAGEN: -->
+        <a id="group-link" href="https://groups.google.com/g/holdup-testers" target="_blank" rel="noopener noreferrer" class="btn btn-primary">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/>
+            <circle cx="9" cy="7" r="4"/>
+            <path d="M22 21v-2a4 4 0 0 0-3-3.87"/>
+            <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+          </svg>
+          Google Gruppe beitreten
+        </a>
+      </section>
+
+      <!-- Step 2: Play Store Opt-In & Download -->
+      <section class="step-card step-2">
+        <div class="step-header">
+          <div class="step-number">2</div>
+          <h2 class="step-title">Tester werden & herunterladen</h2>
+        </div>
+        <p class="step-desc">
+          Nach dem Gruppenbeitritt kannst du die Einladung annehmen und HoldUp direkt über den <b>Google Play Store</b> installieren:
+        </p>
+        
+        <!-- Link direkt zur Play Store App -->
+        <a id="playstore-app-link" href="https://play.google.com/store/apps/details?id=com.sneakyzippy.holdup" target="_blank" rel="noopener noreferrer" class="btn btn-accent">
+          <svg viewBox="0 0 24 24" fill="currentColor">
+            <path d="M3.609 1.814L13.792 12 3.61 22.186c-.378-.403-.61-.958-.61-1.579V3.393c0-.621.232-1.176.609-1.579zm11.241 11.244l2.58 2.58-12.012 6.945 9.432-9.525zm0-2.116L5.418 1.417l12.012 6.945-2.58 2.58zm1.472 1.058l3.666 2.12c1.016.588 1.016 1.547 0 2.135l-3.666 2.12-2.34-2.34 2.34-2.035z"/>
+          </svg>
+          Im Google Play Store öffnen
+        </a>
+
+        <!-- Web Opt-in Alternative -->
+        <a id="playstore-web-link" href="https://play.google.com/apps/testing/com.sneakyzippy.holdup" target="_blank" rel="noopener noreferrer" class="btn btn-secondary">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10"/>
+            <line x1="2" y1="12" x2="22" y2="12"/>
+            <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+          </svg>
+          Im Web-Browser als Tester bestätigen
+        </a>
+      </section>
+
+    </main>
+
+    <!-- Troubleshooting -->
+    <section class="faq">
+      <div class="faq-title">Hilfe & Troubleshooting</div>
+      
+      <div class="faq-item">
+        <strong>Play Store meldet „Element nicht gefunden“?</strong>
+        Es kann nach dem Gruppenbeitritt 2–5 Minuten dauern, bis Google deine E-Mail synchronisiert hat. Prüfe auch, ob im Play Store dasselbe Google-Konto aktiv ist wie beim Gruppenbeitritt.
+      </div>
+
+      <div class="faq-item">
+        <strong>Direkte APK bevorzugt?</strong>
+        Du kannst alternativ auch die aktuelle APK direkt von unseren 
+        <a href="https://github.com/SneakyZippy/HoldUp/releases" target="_blank" style="color: var(--primary); text-decoration: underline;">GitHub Releases</a> herunterladen.
+      </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="footer">
+      <div>HoldUp • 100% lokal, Open Source & werbefrei.</div>
+      <div>
+        <a href="https://github.com/SneakyZippy/HoldUp" target="_blank" rel="noopener noreferrer">GitHub Repository</a>
+      </div>
+    </footer>
+
+  </div>
+
+  <script>
+    function copyShareText() {
+      const url = window.location.href;
+      navigator.clipboard.writeText(url).then(() => {
+        const textSpan = document.getElementById('copy-text');
+        const oldText = textSpan.innerText;
+        textSpan.innerText = 'In Zwischenablage kopiert! 🎉';
+        setTimeout(() => {
+          textSpan.innerText = oldText;
+        }, 2500);
+      }).catch(() => {
+        alert('Link: ' + window.location.href);
+      });
+    }
+  </script>
+</body>
+</html>
