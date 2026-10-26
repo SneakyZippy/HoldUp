@@ -388,9 +388,10 @@ fun AppRuleBottomSheet(
                     contentColor = MaterialTheme.colorScheme.onPrimary
                 ),
                 shape = RoundedCornerShape(18.dp),
+                contentPadding = PaddingValues(horizontal = 24.dp, vertical = 12.dp),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(52.dp)
+                    .defaultMinSize(minHeight = 52.dp)
             ) {
                 Text(
                     text = "Save Rule",

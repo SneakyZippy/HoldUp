@@ -24,16 +24,19 @@ class HoldUpAccessibilityService : AccessibilityService() {
         var instance: HoldUpAccessibilityService? = null
             private set
 
+        @Volatile
+        private var suppressedPackage: String? = null
+        @Volatile
+        private var suppressUntil: Long = 0L
+
+        fun suppressInterception(packageName: String, durationMs: Long = 3500L) {
+            suppressedPackage = packageName
+            suppressUntil = System.currentTimeMillis() + durationMs
+        }
+
         fun performGoHome(): Boolean {
             return instance?.performGlobalAction(GLOBAL_ACTION_HOME) ?: false
         }
-
-        private val SETTINGS_PACKAGES = setOf(
-            "com.android.settings",
-            "com.google.android.packageinstaller",
-            "com.android.packageinstaller",
-            "com.samsung.android.packageinstaller"
-        )
     }
 
     override fun onServiceConnected() {
@@ -70,9 +73,15 @@ class HoldUpAccessibilityService : AccessibilityService() {
             return
         }
 
-        // Debounce rapid window changes for the same package (within 1.5 seconds)
         val now = System.currentTimeMillis()
-        if (targetPackageName == lastInterceptedPackage && (now - lastInterceptTime) < 1500) {
+
+        // Skip temporarily suppressed package (e.g. during Walk Away transition or newly approved session)
+        if (targetPackageName == suppressedPackage && now < suppressUntil) {
+            return
+        }
+
+        // Debounce rapid window changes for the same package (within 2 seconds)
+        if (targetPackageName == lastInterceptedPackage && (now - lastInterceptTime) < 2000) {
             return
         }
 
@@ -83,28 +92,10 @@ class HoldUpAccessibilityService : AccessibilityService() {
 
             val isChildSafety = prefs.isChildSafetyEnabled.first()
 
-            // 1. Guard against tampering via system Settings or Package Installers
-            if (isChildSafety && SETTINGS_PACKAGES.contains(targetPackageName)) {
-                val isUnlocked = prefs.isSettingsTemporarilyUnlocked()
-                if (!isUnlocked) {
-                    lastInterceptedPackage = targetPackageName
-                    lastInterceptTime = now
-                    performGoHome()
-                    withContext(Dispatchers.Main) {
-                        Toast.makeText(
-                            this@HoldUpAccessibilityService,
-                            "🔒 Settings locked by Child Safety. Open HoldUp to unlock.",
-                            Toast.LENGTH_SHORT
-                        ).show()
-                    }
-                    return@launch
-                }
-            }
-
             val monitoredList = prefs.monitoredPackages.first()
             if (!monitoredList.contains(targetPackageName)) return@launch
 
-            // 2. Child Safety Instant Close (hard block without countdown or session proceed)
+            // Hard Lockout: Instant Close for monitored apps (no session proceed or countdown)
             if (isChildSafety) {
                 lastInterceptedPackage = targetPackageName
                 lastInterceptTime = now
@@ -113,7 +104,7 @@ class HoldUpAccessibilityService : AccessibilityService() {
                 withContext(Dispatchers.Main) {
                     Toast.makeText(
                         this@HoldUpAccessibilityService,
-                        "🔒 App locked by Child Safety",
+                        "🔒 App closed by Hard Lockout",
                         Toast.LENGTH_SHORT
                     ).show()
                 }

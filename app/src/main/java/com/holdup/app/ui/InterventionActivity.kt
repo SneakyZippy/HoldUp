@@ -18,6 +18,8 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
@@ -82,6 +84,9 @@ class InterventionActivity : ComponentActivity() {
                     isTestMode = isTestMode,
                     testType = testType,
                     onWalkAway = { isAlternative ->
+                        if (targetPackage.isNotBlank()) {
+                            HoldUpAccessibilityService.suppressInterception(targetPackage, 3500L)
+                        }
                         if (isTestMode) {
                             Toast.makeText(
                                 this@InterventionActivity,
@@ -108,6 +113,9 @@ class InterventionActivity : ComponentActivity() {
                         finishAndRemoveTask()
                     },
                     onOpenSession = { minutes ->
+                        if (targetPackage.isNotBlank()) {
+                            HoldUpAccessibilityService.suppressInterception(targetPackage, 2500L)
+                        }
                         if (isTestMode) {
                             Toast.makeText(
                                 this@InterventionActivity,
@@ -235,10 +243,8 @@ fun InterventionScreen(
         }
     }
 
-    if (isTestMode) {
-        BackHandler {
-            onWalkAway(false)
-        }
+    BackHandler {
+        onWalkAway(false)
     }
 
     val context = androidx.compose.ui.platform.LocalContext.current
@@ -248,54 +254,136 @@ fun InterventionScreen(
         }
     }
 
-    Box(
+    BoxWithConstraints(
         modifier = Modifier
             .fillMaxSize()
             .background(ZenBackground)
             .statusBarsPadding()
             .navigationBarsPadding()
     ) {
+        val minHeight = maxHeight
         Column(
             modifier = Modifier
-                .fillMaxSize()
-                .padding(vertical = 24.dp),
+                .fillMaxWidth()
+                .heightIn(min = minHeight)
+                .verticalScroll(rememberScrollState())
+                .padding(vertical = 20.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.SpaceBetween
         ) {
-            // Header: Live Preview Pill, Reality Check or Soft Nudge banner
-            if (isTestMode) {
-                Surface(
-                    shape = RoundedCornerShape(20.dp),
-                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.45f)),
-                    modifier = Modifier.padding(bottom = 12.dp)
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
-                        verticalAlignment = Alignment.CenterVertically
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                // Header: Live Preview Pill, Reality Check or Soft Nudge banner
+                if (isTestMode) {
+                    Surface(
+                        shape = RoundedCornerShape(20.dp),
+                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.45f)),
+                        modifier = Modifier.padding(bottom = 12.dp)
                     ) {
-                        Text(
-                            text = "🧪 Live Preview • ${activeInterventionType.displayName}",
-                            style = MaterialTheme.typography.labelSmall.copy(
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.primary
-                            )
-                        )
-                        Spacer(modifier = Modifier.width(10.dp))
-                        Surface(
-                            shape = CircleShape,
-                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.25f),
-                            modifier = Modifier
-                                .size(20.dp)
-                                .clip(CircleShape)
-                                .clickable { onWalkAway(false) }
+                        Row(
+                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Box(contentAlignment = Alignment.Center) {
-                                Icon(
-                                    imageVector = Icons.Default.Close,
-                                    contentDescription = "Exit Preview",
-                                    tint = MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.size(12.dp)
+                            Text(
+                                text = "🧪 Live Preview • ${activeInterventionType.displayName}",
+                                style = MaterialTheme.typography.labelSmall.copy(
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            )
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Surface(
+                                shape = CircleShape,
+                                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.25f),
+                                modifier = Modifier
+                                    .size(20.dp)
+                                    .clip(CircleShape)
+                                    .clickable { onWalkAway(false) }
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(
+                                        imageVector = Icons.Default.Close,
+                                        contentDescription = "Exit Preview",
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(12.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
+                if (isSoftNudge) {
+                    SoftNudgeHeader(targetPackageName = targetPackageName)
+                } else {
+                    RealityCheckHeader(packageName = targetPackageName)
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // Body: Active Intervention Content
+                Box(
+                    modifier = Modifier.fillMaxWidth(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    if (isSoftNudge) {
+                        SoftNudgeBody()
+                    } else {
+                        when (activeInterventionType) {
+                            InterventionType.BREATHING -> {
+                                BreathingOrb(
+                                    totalSeconds = breathingSeconds,
+                                    onCompleted = { isInterventionCompleted = true }
+                                )
+                            }
+                            InterventionType.REFLECTION -> {
+                                ReflectionCard(
+                                    quote = currentQuote.ifEmpty { "Pause and take a deep breath." },
+                                    onNextQuote = {
+                                        if (availableQuotes.isNotEmpty()) {
+                                            coroutineScope.launch {
+                                                currentQuote = prefs.getNextReflectionQuote(availableQuotes)
+                                            }
+                                        }
+                                    },
+                                    onDismissQuote = { dismissedText ->
+                                        coroutineScope.launch {
+                                            prefs.dismissReflection(dismissedText)
+                                            val remaining = availableQuotes.filter { it != dismissedText }
+                                            availableQuotes = if (remaining.isNotEmpty()) remaining else defaultReflections
+                                            currentQuote = prefs.getNextReflectionQuote(availableQuotes)
+                                        }
+                                    }
+                                )
+                            }
+                            InterventionType.PHOTO -> {
+                                LovedOneCard(
+                                    photoUriString = photoUri,
+                                    caption = photoCaption,
+                                    onCompleted = { isInterventionCompleted = true }
+                                )
+                            }
+                            InterventionType.VIDEO -> {
+                                VideoPlayerView(
+                                    videoUriString = videoUri,
+                                    onCompleted = { isInterventionCompleted = true }
+                                )
+                            }
+                            InterventionType.ALTERNATIVES -> {
+                                AlternativesList(
+                                    activities = displayedAlternatives.ifEmpty { allAlternativeActivities.take(3) },
+                                    selectedActivity = selectedAlternative,
+                                    onSelectActivity = {
+                                        selectedAlternative = if (selectedAlternative?.id == it.id) null else it
+                                        isInterventionCompleted = true
+                                    },
+                                    onShuffle = {
+                                        val activePool = allAlternativeActivities.filter { it.isEnabled }.ifEmpty { allAlternativeActivities }
+                                        displayedAlternatives = activePool.shuffled().take(3)
+                                    }
                                 )
                             }
                         }
@@ -303,79 +391,7 @@ fun InterventionScreen(
                 }
             }
 
-            if (isSoftNudge) {
-                SoftNudgeHeader(targetPackageName = targetPackageName)
-            } else {
-                RealityCheckHeader(packageName = targetPackageName)
-            }
-
-            // Body: Active Intervention Content
-            Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxWidth(),
-                contentAlignment = Alignment.Center
-            ) {
-                if (isSoftNudge) {
-                    SoftNudgeBody()
-                } else {
-                    when (activeInterventionType) {
-                        InterventionType.BREATHING -> {
-                            BreathingOrb(
-                                totalSeconds = breathingSeconds,
-                                onCompleted = { isInterventionCompleted = true }
-                            )
-                        }
-                        InterventionType.REFLECTION -> {
-                            ReflectionCard(
-                                quote = currentQuote.ifEmpty { "Pause and take a deep breath." },
-                                onNextQuote = {
-                                    if (availableQuotes.isNotEmpty()) {
-                                        coroutineScope.launch {
-                                            currentQuote = prefs.getNextReflectionQuote(availableQuotes)
-                                        }
-                                    }
-                                },
-                                onDismissQuote = { dismissedText ->
-                                    coroutineScope.launch {
-                                        prefs.dismissReflection(dismissedText)
-                                        val remaining = availableQuotes.filter { it != dismissedText }
-                                        availableQuotes = if (remaining.isNotEmpty()) remaining else defaultReflections
-                                        currentQuote = prefs.getNextReflectionQuote(availableQuotes)
-                                    }
-                                }
-                            )
-                        }
-                        InterventionType.PHOTO -> {
-                            LovedOneCard(
-                                photoUriString = photoUri,
-                                caption = photoCaption,
-                                onCompleted = { isInterventionCompleted = true }
-                            )
-                        }
-                        InterventionType.VIDEO -> {
-                            VideoPlayerView(
-                                videoUriString = videoUri,
-                                onCompleted = { isInterventionCompleted = true }
-                            )
-                        }
-                        InterventionType.ALTERNATIVES -> {
-                            AlternativesList(
-                                activities = displayedAlternatives.ifEmpty { allAlternativeActivities.take(3) },
-                                selectedActivity = selectedAlternative,
-                                onSelectActivity = {
-                                    selectedAlternative = if (selectedAlternative?.id == it.id) null else it
-                                    isInterventionCompleted = true
-                                },
-                                onShuffle = {
-                                    val activePool = allAlternativeActivities.filter { it.isEnabled }.ifEmpty { allAlternativeActivities }
-                                    displayedAlternatives = activePool.shuffled().take(3)
-                                }
-                            )
-                        }
-                    }
-                }
-            }
+            Spacer(modifier = Modifier.height(16.dp))
 
             // Footer: Decision Controls
             AnimatedVisibility(
@@ -553,23 +569,30 @@ fun DecisionFooter(
                             contentColor = MaterialTheme.colorScheme.onPrimary
                         ),
                         shape = RoundedCornerShape(20.dp),
+                        contentPadding = PaddingValues(horizontal = 20.dp, vertical = 12.dp),
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(54.dp)
+                            .defaultMinSize(minHeight = 54.dp)
                     ) {
-                        Icon(imageVector = Icons.Default.Check, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = if (selectedAlternative != null) {
-                                "${selectedAlternative.title} (+20 pts)"
-                            } else {
-                                "Walk Away (+10 pts)"
-                            },
-                            style = MaterialTheme.typography.titleMedium.copy(
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 15.sp
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.Center
+                        ) {
+                            Icon(imageVector = Icons.Default.Check, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = if (selectedAlternative != null) {
+                                    "${selectedAlternative.title} (+20 pts)"
+                                } else {
+                                    "Walk Away (+10 pts)"
+                                },
+                                style = MaterialTheme.typography.titleMedium.copy(
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 15.sp
+                                ),
+                                textAlign = androidx.compose.ui.text.style.TextAlign.Center
                             )
-                        )
+                        }
                     }
 
                     Spacer(modifier = Modifier.height(10.dp))
@@ -581,20 +604,24 @@ fun DecisionFooter(
                         border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.08f)),
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(50.dp)
+                            .defaultMinSize(minHeight = 50.dp)
                             .clip(RoundedCornerShape(20.dp))
                             .clickable {
                                 haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
                                 currentStep = DecisionStep.CHOOSE_DURATION
                             }
                     ) {
-                        Box(contentAlignment = Alignment.Center) {
+                        Box(
+                            contentAlignment = Alignment.Center,
+                            modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp)
+                        ) {
                             Text(
                                 text = if (appName.isNotBlank()) "Open $appName mindfully" else "Continue mindfully",
                                 style = MaterialTheme.typography.bodyMedium.copy(
                                     fontWeight = FontWeight.Medium,
                                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.85f)
-                                )
+                                ),
+                                textAlign = androidx.compose.ui.text.style.TextAlign.Center
                             )
                         }
                     }
@@ -732,16 +759,18 @@ fun DecisionFooter(
                             contentColor = MaterialTheme.colorScheme.onPrimary
                         ),
                         shape = RoundedCornerShape(20.dp),
+                        contentPadding = PaddingValues(horizontal = 20.dp, vertical = 12.dp),
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(54.dp)
+                            .defaultMinSize(minHeight = 54.dp)
                     ) {
                         Text(
                             text = if (isSoftNudge) "Continue for $selectedMinutes min" else "Enter for $selectedMinutes min",
                             style = MaterialTheme.typography.titleMedium.copy(
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 15.sp
-                            )
+                            ),
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
                         )
                     }
 

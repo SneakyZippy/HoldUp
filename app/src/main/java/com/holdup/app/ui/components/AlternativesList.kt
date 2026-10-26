@@ -95,13 +95,11 @@ fun AlternativesList(
             }
         }
 
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxWidth()
-                .heightIn(max = 280.dp),
+        Column(
+            modifier = Modifier.fillMaxWidth(),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            items(activities, key = { it.id }) { activity ->
+            activities.forEach { activity ->
                 val isSelected = activity.id == selectedActivity?.id
 
                 Surface(
@@ -156,6 +154,8 @@ fun AlternativesList(
                                 )
                             )
                         }
+
+                        Spacer(modifier = Modifier.width(8.dp))
 
                         // Points Reward Badge
                         Surface(

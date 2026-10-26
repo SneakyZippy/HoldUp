@@ -146,10 +146,6 @@ class PreferencesManager(private val context: Context) {
         !prefs[KEY_PARENT_PIN_HASH].isNullOrBlank()
     }
 
-    val tempSettingsUnlockUntil: Flow<Long> = context.dataStore.data.map { prefs ->
-        prefs[KEY_TEMP_SETTINGS_UNLOCK_UNTIL] ?: 0L
-    }
-
     suspend fun setMonitoringEnabled(enabled: Boolean) {
         context.dataStore.edit { prefs ->
             prefs[KEY_MONITORING_ENABLED] = enabled
@@ -528,18 +524,5 @@ class PreferencesManager(private val context: Context) {
         val savedHash = prefs[KEY_PARENT_PIN_HASH] ?: return false
         val computed = hashPin(pin, salt)
         return computed.equals(savedHash, ignoreCase = true)
-    }
-
-    suspend fun unlockSettingsTemporarily(minutes: Int = 5) {
-        val until = System.currentTimeMillis() + (minutes * 60 * 1000L)
-        context.dataStore.edit { prefs ->
-            prefs[KEY_TEMP_SETTINGS_UNLOCK_UNTIL] = until
-        }
-    }
-
-    suspend fun isSettingsTemporarilyUnlocked(): Boolean {
-        val prefs = context.dataStore.data.first()
-        val until = prefs[KEY_TEMP_SETTINGS_UNLOCK_UNTIL] ?: 0L
-        return System.currentTimeMillis() < until
     }
 }
