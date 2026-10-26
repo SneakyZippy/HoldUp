@@ -9,6 +9,7 @@
 </p>
 
 <p align="center">
+  <a href="https://sneakyzippy.github.io/HoldUp/"><img src="https://img.shields.io/badge/Website-GitHub%20Pages-4EE1A0?logo=github&logoColor=white" alt="Website"></a>
   <a href="https://github.com/SneakyZippy/HoldUp/releases"><img src="https://img.shields.io/github/v/release/SneakyZippy/HoldUp?color=4CAF50&label=Release" alt="Release"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-GPLv3-blue.svg" alt="License"></a>
   <img src="https://img.shields.io/badge/Platform-Android-brightgreen.svg" alt="Android">
@@ -36,11 +37,12 @@ Every time you decide not to open a shielded app, you earn **Mindful Points**:
 - **Healthy Swap**: +20 points
 - Level up through focus tiers (*Mindful Novice* → *Focus Builder* → *Focus Pro* → *Habit Champion* → *Zen Master*) and track your progress right from the dashboard.
 
-## Download & Build
+## Download & Testing
 
-Download the latest APK directly from [Releases](https://github.com/SneakyZippy/HoldUp/releases).
+- 🧪 **Closed Beta**: Join the Google Play closed test with step-by-step instructions on our [Testing Portal](https://sneakyzippy.github.io/HoldUp/).
+- 📦 **Direct APK**: Download the latest release directly from [GitHub Releases](https://github.com/SneakyZippy/HoldUp/releases).
 
-Build locally:
+### Build from Source
 ```bash
 ./gradlew assembleDebug
 ```
