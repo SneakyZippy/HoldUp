@@ -39,8 +39,10 @@ Every time you decide not to open a shielded app, you earn **Mindful Points**:
 
 ## Download & Testing
 
-- 🧪 **Closed Beta**: Join the Google Play closed test with step-by-step instructions on our [Testing Portal](https://sneakyzippy.github.io/HoldUp/).
-- 📦 **Direct APK**: Download the latest release directly from [GitHub Releases](https://github.com/SneakyZippy/HoldUp/releases).
+HoldUp is currently in closed testing. If you'd like to try it out, you can download it from Google Play as a tester until it's officially released!
+
+- 🧪 **Google Play Closed Beta**: Follow the step-by-step instructions on our [Testing Portal](https://sneakyzippy.github.io/HoldUp/) to join the tester group and install directly from Google Play.
+- 📦 **Direct APK**: Download the latest release APK from [GitHub Releases](https://github.com/SneakyZippy/HoldUp/releases).
 
 ### Build from Source
 ```bash
