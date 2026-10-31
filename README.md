@@ -30,11 +30,14 @@ When you open a monitored app, HoldUp pauses you with a mindful intervention:
 
 Choose to **Walk Away** (+10 pts) to log a mindful win and return home, choose a **Healthy Swap** (+20 pts) to redirect your energy, or open the app mindfully for a set session (**5, 10, or 15 min**). When your time expires, a soft nudge brings you back to reality.
 
-## Mindful Points & Levels
+## Mindful Points & Clean Focus
 
-Every time you decide not to open a shielded app, you earn **Mindful Points**:
-- **Walk Away**: +10 points
-- **Healthy Swap**: +20 points
+HoldUp rewards both conscious pause choices and pure offline focus:
+- **Clean Focus Hours**: Earn **+10 points automatically** for every consecutive hour you don't touch any shielded app during daytime (08:00–22:00).
+- **Daily Focus Bonus**: Earn a **Pure Zen bonus (+50 pts)** for zero attempts all day, or a **Mindful Recovery bonus (+25 pts)** if you had 1–2 attempts and walked away.
+- **Walk Away**: **+10 points** for mindfully stepping back when an intervention triggers.
+- **Healthy Swap**: **+20 points** for consciously redirecting your attention to an enriching alternative.
+- **Relapse Resistance**: Re-opening a shielded app within 15 minutes progressively increases the pause duration (10s → 20s) and proceeding deducts **5 points**, while walking away always preserves your hard-earned score.
 - Level up through focus tiers (*Mindful Novice* → *Focus Builder* → *Focus Pro* → *Habit Champion* → *Zen Master*) and track your progress right from the dashboard.
 
 ## Download & Testing

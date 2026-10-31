@@ -90,10 +90,13 @@ class HoldUpAccessibilityService : AccessibilityService() {
             val isMonitoring = prefs.isMonitoringEnabled.first()
             if (!isMonitoring) return@launch
 
-            val isChildSafety = prefs.isChildSafetyEnabled.first()
-
             val monitoredList = prefs.monitoredPackages.first()
             if (!monitoredList.contains(targetPackageName)) return@launch
+
+            // Sync clean focus points before logging any interruption
+            prefs.syncCleanFocus()
+
+            val isChildSafety = prefs.isChildSafetyEnabled.first()
 
             // Hard Lockout: Instant Close for monitored apps (no session proceed or countdown)
             if (isChildSafety) {

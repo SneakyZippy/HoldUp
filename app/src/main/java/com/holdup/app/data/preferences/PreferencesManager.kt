@@ -45,6 +45,11 @@ class PreferencesManager(private val context: Context) {
         private val KEY_PARENT_PIN_HASH = stringPreferencesKey("parent_pin_hash")
         private val KEY_PARENT_PIN_SALT = stringPreferencesKey("parent_pin_salt")
         private val KEY_TEMP_SETTINGS_UNLOCK_UNTIL = longPreferencesKey("temp_settings_unlock_until")
+        private val KEY_RELAPSE_RESISTANCE_ENABLED = booleanPreferencesKey("relapse_resistance_enabled")
+        private val KEY_APP_INTERVENTION_TIMESTAMPS = stringPreferencesKey("app_intervention_timestamps_json")
+        private val KEY_LAST_INTERRUPTION_TIMESTAMP = longPreferencesKey("last_interruption_timestamp")
+        private val KEY_CLEAN_HOURS_AWARDED_TODAY = intPreferencesKey("clean_hours_awarded_today")
+        private val KEY_CLEAN_DAY_BONUS_AWARDED = booleanPreferencesKey("clean_day_bonus_awarded")
 
         // Popular doomscroll apps pre-populated as defaults
         val DEFAULT_TARGET_PACKAGES = setOf(
@@ -116,26 +121,74 @@ class PreferencesManager(private val context: Context) {
         }
     }
 
+    val isRelapseResistanceEnabled: Flow<Boolean> = context.dataStore.data.map { prefs ->
+        prefs[KEY_RELAPSE_RESISTANCE_ENABLED] ?: true
+    }
+
+    suspend fun setRelapseResistanceEnabled(enabled: Boolean) {
+        context.dataStore.edit { prefs ->
+            prefs[KEY_RELAPSE_RESISTANCE_ENABLED] = enabled
+        }
+    }
+
+    private fun calculateCleanFocusMinutes(lastInterruption: Long, now: Long): Int {
+        val calStart = Calendar.getInstance().apply {
+            timeInMillis = now
+            set(Calendar.HOUR_OF_DAY, 8)
+            set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+        }
+        val calEnd = Calendar.getInstance().apply {
+            timeInMillis = now
+            set(Calendar.HOUR_OF_DAY, 22)
+            set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+        }
+        val startWindow = calStart.timeInMillis
+        val endWindow = calEnd.timeInMillis
+
+        if (now < startWindow) return 0
+
+        val streakStart = maxOf(startWindow, lastInterruption)
+        val effectiveEnd = minOf(now, endWindow)
+
+        val cleanMs = if (effectiveEnd > streakStart) effectiveEnd - streakStart else 0L
+        return (cleanMs / 60000L).toInt()
+    }
+
     val todayStats: Flow<DailyStats> = context.dataStore.data.map { prefs ->
         val savedDate = prefs[KEY_TODAY_DATE] ?: ""
         val today = getTodayDateString()
         val lifetime = prefs[KEY_LIFETIME_POINTS] ?: 0
-        if (savedDate == today) {
-            DailyStats(
-                dateString = today,
-                totalInterceptions = prefs[KEY_TOTAL_INTERCEPTIONS] ?: 0,
-                walkedAwayCount = prefs[KEY_WALKED_AWAY] ?: 0,
-                proceededCount = prefs[KEY_PROCEEDED] ?: 0,
-                estimatedMinutesSaved = prefs[KEY_MINUTES_SAVED] ?: 0,
-                pointsEarnedToday = prefs[KEY_POINTS_TODAY] ?: 0,
-                lifetimePoints = lifetime
-            )
-        } else {
-            DailyStats(
-                dateString = today,
-                lifetimePoints = lifetime
-            )
-        }
+        val isToday = savedDate == today
+
+        val totalInterceptions = if (isToday) prefs[KEY_TOTAL_INTERCEPTIONS] ?: 0 else 0
+        val walkedAway = if (isToday) prefs[KEY_WALKED_AWAY] ?: 0 else 0
+        val proceeded = if (isToday) prefs[KEY_PROCEEDED] ?: 0 else 0
+        val minutesSaved = if (isToday) prefs[KEY_MINUTES_SAVED] ?: 0 else 0
+        val pointsToday = if (isToday) prefs[KEY_POINTS_TODAY] ?: 0 else 0
+        val cleanHoursAwarded = if (isToday) prefs[KEY_CLEAN_HOURS_AWARDED_TODAY] ?: 0 else 0
+        val isCleanBonusAwarded = if (isToday) prefs[KEY_CLEAN_DAY_BONUS_AWARDED] ?: false else false
+
+        val cleanMinutes = calculateCleanFocusMinutes(
+            lastInterruption = prefs[KEY_LAST_INTERRUPTION_TIMESTAMP] ?: 0L,
+            now = System.currentTimeMillis()
+        )
+
+        DailyStats(
+            dateString = today,
+            totalInterceptions = totalInterceptions,
+            walkedAwayCount = walkedAway,
+            proceededCount = proceeded,
+            estimatedMinutesSaved = minutesSaved,
+            pointsEarnedToday = pointsToday,
+            lifetimePoints = lifetime,
+            cleanFocusMinutesToday = cleanMinutes,
+            cleanFocusHoursAwarded = cleanHoursAwarded,
+            isCleanDayBonusAwarded = isCleanBonusAwarded
+        )
     }
 
     val isChildSafetyEnabled: Flow<Boolean> = context.dataStore.data.map { prefs ->
@@ -188,8 +241,109 @@ class PreferencesManager(private val context: Context) {
         }
     }
 
+    suspend fun checkRelapseState(packageName: String): RelapseState {
+        val prefs = context.dataStore.data.first()
+        val isEnabled = prefs[KEY_RELAPSE_RESISTANCE_ENABLED] ?: true
+        if (!isEnabled || packageName.isBlank()) {
+            return RelapseState(tier = 1, recentAttemptsCount = 1, delaySeconds = 0, penaltyPoints = 0)
+        }
+
+        val raw = prefs[KEY_APP_INTERVENTION_TIMESTAMPS] ?: return RelapseState(tier = 1, recentAttemptsCount = 1, delaySeconds = 0, penaltyPoints = 0)
+        val historyMap = try {
+            json.decodeFromString<Map<String, List<Long>>>(raw)
+        } catch (_: Exception) {
+            emptyMap()
+        }
+
+        val now = System.currentTimeMillis()
+        val fifteenMinutesAgo = now - (15 * 60 * 1000L)
+        val recentAttempts = historyMap[packageName]?.filter { it >= fifteenMinutesAgo } ?: emptyList()
+        val count = recentAttempts.size
+
+        return when {
+            count == 0 -> RelapseState(tier = 1, recentAttemptsCount = 1, delaySeconds = 0, penaltyPoints = 0)
+            count == 1 -> RelapseState(tier = 2, recentAttemptsCount = 2, delaySeconds = 10, penaltyPoints = 5)
+            else -> RelapseState(tier = 3, recentAttemptsCount = count + 1, delaySeconds = 20, penaltyPoints = 5)
+        }
+    }
+
+    suspend fun recordProceedPenalty(points: Int = 5) {
+        val today = getTodayDateString()
+        context.dataStore.edit { prefs ->
+            val savedDate = prefs[KEY_TODAY_DATE] ?: ""
+            if (savedDate == today) {
+                val currentToday = prefs[KEY_POINTS_TODAY] ?: 0
+                prefs[KEY_POINTS_TODAY] = (currentToday - points).coerceAtLeast(0)
+            }
+            val currentLifetime = prefs[KEY_LIFETIME_POINTS] ?: 0
+            prefs[KEY_LIFETIME_POINTS] = (currentLifetime - points).coerceAtLeast(0)
+        }
+    }
+
+    suspend fun syncCleanFocus(): DailyStats {
+        val today = getTodayDateString()
+        val now = System.currentTimeMillis()
+        var newPointsToAdd = 0
+
+        context.dataStore.edit { prefs ->
+            val savedDate = prefs[KEY_TODAY_DATE] ?: ""
+            if (savedDate != today) {
+                prefs[KEY_TODAY_DATE] = today
+                prefs[KEY_TOTAL_INTERCEPTIONS] = 0
+                prefs[KEY_WALKED_AWAY] = 0
+                prefs[KEY_PROCEEDED] = 0
+                prefs[KEY_MINUTES_SAVED] = 0
+                prefs[KEY_POINTS_TODAY] = 0
+                prefs[KEY_CLEAN_HOURS_AWARDED_TODAY] = 0
+                prefs[KEY_CLEAN_DAY_BONUS_AWARDED] = false
+            }
+
+            val lastInterruption = prefs[KEY_LAST_INTERRUPTION_TIMESTAMP] ?: 0L
+            val cleanMinutes = calculateCleanFocusMinutes(lastInterruption, now)
+            val fullHours = cleanMinutes / 60
+            val alreadyAwardedHours = prefs[KEY_CLEAN_HOURS_AWARDED_TODAY] ?: 0
+
+            if (fullHours > alreadyAwardedHours) {
+                val hoursToAward = fullHours - alreadyAwardedHours
+                newPointsToAdd += hoursToAward * 10
+                prefs[KEY_CLEAN_HOURS_AWARDED_TODAY] = fullHours
+            }
+
+            val calEnd = Calendar.getInstance().apply {
+                timeInMillis = now
+                set(Calendar.HOUR_OF_DAY, 22)
+                set(Calendar.MINUTE, 0)
+                set(Calendar.SECOND, 0)
+                set(Calendar.MILLISECOND, 0)
+            }
+            val isPast22 = now >= calEnd.timeInMillis
+            val cleanBonusAwarded = prefs[KEY_CLEAN_DAY_BONUS_AWARDED] ?: false
+
+            if (isPast22 && !cleanBonusAwarded) {
+                val total = prefs[KEY_TOTAL_INTERCEPTIONS] ?: 0
+                val proceeded = prefs[KEY_PROCEEDED] ?: 0
+                if (total == 0) {
+                    newPointsToAdd += 50
+                    prefs[KEY_CLEAN_DAY_BONUS_AWARDED] = true
+                } else if (total in 1..2 && proceeded == 0) {
+                    newPointsToAdd += 25
+                    prefs[KEY_CLEAN_DAY_BONUS_AWARDED] = true
+                }
+            }
+
+            if (newPointsToAdd > 0) {
+                val currentToday = prefs[KEY_POINTS_TODAY] ?: 0
+                val currentLifetime = prefs[KEY_LIFETIME_POINTS] ?: 0
+                prefs[KEY_POINTS_TODAY] = currentToday + newPointsToAdd
+                prefs[KEY_LIFETIME_POINTS] = currentLifetime + newPointsToAdd
+            }
+        }
+        return todayStats.first()
+    }
+
     suspend fun recordInterception(packageName: String) {
         val today = getTodayDateString()
+        val now = System.currentTimeMillis()
         context.dataStore.edit { prefs ->
             val savedDate = prefs[KEY_TODAY_DATE] ?: ""
             if (savedDate != today) {
@@ -198,9 +352,31 @@ class PreferencesManager(private val context: Context) {
                 prefs[KEY_WALKED_AWAY] = 0
                 prefs[KEY_PROCEEDED] = 0
                 prefs[KEY_MINUTES_SAVED] = 0
+                prefs[KEY_POINTS_TODAY] = 0
+                prefs[KEY_CLEAN_HOURS_AWARDED_TODAY] = 0
+                prefs[KEY_CLEAN_DAY_BONUS_AWARDED] = false
             } else {
                 val current = prefs[KEY_TOTAL_INTERCEPTIONS] ?: 0
                 prefs[KEY_TOTAL_INTERCEPTIONS] = current + 1
+            }
+
+            // Update interruption timestamp for Clean Focus
+            prefs[KEY_LAST_INTERRUPTION_TIMESTAMP] = now
+
+            // Update app intervention history for Relapse Resistance
+            if (packageName.isNotBlank()) {
+                val raw = prefs[KEY_APP_INTERVENTION_TIMESTAMPS]
+                val currentMap = try {
+                    if (!raw.isNullOrBlank()) json.decodeFromString<Map<String, List<Long>>>(raw) else emptyMap()
+                } catch (_: Exception) {
+                    emptyMap()
+                }.toMutableMap()
+
+                val oneDayAgo = now - (24 * 60 * 60 * 1000L)
+                val list = (currentMap[packageName] ?: emptyList()).filter { it >= oneDayAgo }.toMutableList()
+                list.add(now)
+                currentMap[packageName] = list
+                prefs[KEY_APP_INTERVENTION_TIMESTAMPS] = json.encodeToString(currentMap)
             }
         }
     }
@@ -233,7 +409,8 @@ class PreferencesManager(private val context: Context) {
 
     suspend fun recordProceedSession(packageName: String, durationMinutes: Int) {
         val today = getTodayDateString()
-        val expiresAt = System.currentTimeMillis() + (durationMinutes * 60 * 1000L)
+        val now = System.currentTimeMillis()
+        val expiresAt = now + (durationMinutes * 60 * 1000L)
         context.dataStore.edit { prefs ->
             val savedDate = prefs[KEY_TODAY_DATE] ?: ""
             if (savedDate == today) {
@@ -246,6 +423,8 @@ class PreferencesManager(private val context: Context) {
                 prefs[KEY_PROCEEDED] = 1
                 prefs[KEY_MINUTES_SAVED] = 0
             }
+
+            prefs[KEY_LAST_INTERRUPTION_TIMESTAMP] = now
 
             // Update active sessions map
             val activeSessions = try {

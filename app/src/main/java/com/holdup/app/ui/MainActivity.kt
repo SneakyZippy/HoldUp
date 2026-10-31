@@ -97,6 +97,7 @@ fun MainScreen() {
     val dismissedReflections by prefs.dismissedReflections.collectAsStateWithLifecycle(initialValue = emptySet())
     val isChildSafetyEnabled by prefs.isChildSafetyEnabled.collectAsStateWithLifecycle(initialValue = false)
     val hasParentPin by prefs.hasParentPin.collectAsStateWithLifecycle(initialValue = false)
+    val isRelapseResistanceEnabled by prefs.isRelapseResistanceEnabled.collectAsStateWithLifecycle(initialValue = true)
     var isAppUnlockedByParent by rememberSaveable { mutableStateOf(false) }
 
     val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
@@ -148,6 +149,7 @@ fun MainScreen() {
 
     androidx.lifecycle.compose.LifecycleEventEffect(androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
         checkPermissions()
+        coroutineScope.launch { prefs.syncCleanFocus() }
     }
 
     // First-launch or manual Onboarding Tour
@@ -324,7 +326,11 @@ fun MainScreen() {
                         val intent = Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS)
                         context.startActivity(intent)
                     },
-                    onReplayOnboarding = { showOnboardingManually = true }
+                    onReplayOnboarding = { showOnboardingManually = true },
+                    isRelapseResistanceEnabled = isRelapseResistanceEnabled,
+                    onSetRelapseResistanceEnabled = { enabled ->
+                        coroutineScope.launch { prefs.setRelapseResistanceEnabled(enabled) }
+                    }
                 )
             }
         }
@@ -889,6 +895,124 @@ fun DashboardTab(
                             }
                         }
                     }
+                }
+            }
+        }
+
+        // Clean Focus Hero Card
+        item {
+            Surface(
+                shape = RoundedCornerShape(24.dp),
+                color = MaterialTheme.colorScheme.surfaceContainer,
+                border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.08f)),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(
+                    modifier = Modifier.padding(20.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Surface(
+                                shape = CircleShape,
+                                color = Color(0xFF4CAF50).copy(alpha = 0.15f),
+                                border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF4CAF50).copy(alpha = 0.3f)),
+                                modifier = Modifier.size(42.dp)
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(
+                                        imageVector = Icons.Default.SelfImprovement,
+                                        contentDescription = null,
+                                        tint = Color(0xFF4CAF50),
+                                        modifier = Modifier.size(22.dp)
+                                    )
+                                }
+                            }
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Column {
+                                Text(
+                                    text = "Clean Focus",
+                                    style = MaterialTheme.typography.titleMedium.copy(
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                )
+                                Text(
+                                    text = if (todayStats.cleanFocusMinutesToday >= 60) {
+                                        "${todayStats.currentCleanStreakHours}h ${todayStats.currentCleanStreakMinutesPart}m without shielded apps"
+                                    } else {
+                                        "${todayStats.cleanFocusMinutesToday}m clean streak (08:00 - 22:00)"
+                                    },
+                                    style = MaterialTheme.typography.bodySmall.copy(
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                )
+                            }
+                        }
+
+                        // Daily Zen Bonus Badge
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = if (todayStats.totalInterceptions == 0) Color(0xFF4CAF50).copy(alpha = 0.15f)
+                            else if (todayStats.totalInterceptions in 1..2 && todayStats.proceededCount == 0) Color(0xFFFFA726).copy(alpha = 0.15f)
+                            else Color.White.copy(alpha = 0.05f),
+                            border = androidx.compose.foundation.BorderStroke(
+                                1.dp,
+                                if (todayStats.totalInterceptions == 0) Color(0xFF4CAF50).copy(alpha = 0.35f)
+                                else if (todayStats.totalInterceptions in 1..2 && todayStats.proceededCount == 0) Color(0xFFFFA726).copy(alpha = 0.35f)
+                                else Color.White.copy(alpha = 0.1f)
+                            )
+                        ) {
+                            Text(
+                                text = todayStats.cleanDayBonusStatus,
+                                style = MaterialTheme.typography.labelSmall.copy(
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (todayStats.totalInterceptions == 0) Color(0xFF4CAF50)
+                                    else if (todayStats.totalInterceptions in 1..2 && todayStats.proceededCount == 0) Color(0xFFFFA726)
+                                    else MaterialTheme.colorScheme.onSurfaceVariant
+                                ),
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    // Progress to Next Point Drop
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "+${todayStats.cleanFocusHoursAwarded * 10} pts from focus today",
+                            style = MaterialTheme.typography.bodySmall.copy(
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                        )
+                        Text(
+                            text = "${todayStats.minutesToNextFocusPoint}m to next +10 pts",
+                            style = MaterialTheme.typography.bodySmall.copy(
+                                color = MaterialTheme.colorScheme.primary,
+                                fontWeight = FontWeight.Medium
+                            )
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    LinearProgressIndicator(
+                        progress = { todayStats.focusHourProgress },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(8.dp)
+                            .clip(RoundedCornerShape(4.dp)),
+                        color = MaterialTheme.colorScheme.primary,
+                        trackColor = Color.White.copy(alpha = 0.08f)
+                    )
                 }
             }
         }

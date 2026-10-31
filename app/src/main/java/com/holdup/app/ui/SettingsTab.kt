@@ -32,7 +32,9 @@ fun SettingsTab(
     isUsageAccessGranted: Boolean,
     onOpenAccessibilitySettings: () -> Unit,
     onOpenUsageSettings: () -> Unit,
-    onReplayOnboarding: () -> Unit
+    onReplayOnboarding: () -> Unit,
+    isRelapseResistanceEnabled: Boolean = true,
+    onSetRelapseResistanceEnabled: (Boolean) -> Unit = {}
 ) {
     val haptic = LocalHapticFeedback.current
 
@@ -207,7 +209,83 @@ fun SettingsTab(
             }
         }
 
-        // 2. System Permissions Status Card
+        // 2. Relapse Resistance & Escalating Friction Card
+        item {
+            Surface(
+                shape = RoundedCornerShape(20.dp),
+                color = MaterialTheme.colorScheme.surfaceContainer,
+                border = BorderStroke(1.dp, Color.White.copy(alpha = 0.08f)),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(20.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Surface(
+                                shape = CircleShape,
+                                color = Color(0xFFFFA726).copy(alpha = 0.15f),
+                                modifier = Modifier.size(38.dp)
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(
+                                        imageVector = Icons.Default.Timer,
+                                        contentDescription = null,
+                                        tint = Color(0xFFFFA726),
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
+                            }
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Column {
+                                Text(
+                                    text = "Relapse Resistance",
+                                    style = MaterialTheme.typography.titleMedium.copy(
+                                        fontWeight = FontWeight.SemiBold
+                                    )
+                                )
+                                Text(
+                                    text = "Escalating friction for repeated opens",
+                                    style = MaterialTheme.typography.bodySmall.copy(
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                )
+                            }
+                        }
+
+                        Switch(
+                            checked = isRelapseResistanceEnabled,
+                            onCheckedChange = {
+                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                onSetRelapseResistanceEnabled(it)
+                            },
+                            colors = SwitchDefaults.colors(
+                                checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
+                                checkedTrackColor = MaterialTheme.colorScheme.primary,
+                                uncheckedThumbColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                uncheckedTrackColor = MaterialTheme.colorScheme.surfaceContainerHighest
+                            )
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text(
+                        text = "When re-opening a shielded app within 15 minutes, pauses progressively increase (10s on 2nd open, 20s on 3rd+) and proceeding costs 5 mindful points. Walking away always awards full points.",
+                        style = MaterialTheme.typography.bodySmall.copy(
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.85f),
+                            lineHeight = 18.sp
+                        )
+                    )
+                }
+            }
+        }
+
+        // 3. System Permissions Status Card
         item {
             Surface(
                 shape = RoundedCornerShape(20.dp),

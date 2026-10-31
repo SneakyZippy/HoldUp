@@ -23,6 +23,8 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Timer
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -112,21 +114,24 @@ class InterventionActivity : ComponentActivity() {
                         }
                         finishAndRemoveTask()
                     },
-                    onOpenSession = { minutes ->
+                    onOpenSession = { minutes, isPenalized ->
                         if (targetPackage.isNotBlank()) {
                             HoldUpAccessibilityService.suppressInterception(targetPackage, 2500L)
                         }
                         if (isTestMode) {
-                            Toast.makeText(
-                                this@InterventionActivity,
-                                "Test complete: ${minutes}m session selected",
-                                Toast.LENGTH_SHORT
-                            ).show()
+                            val msg = "Test complete: ${minutes}m session selected" + if (isPenalized) " (-5 pts penalty)" else ""
+                            Toast.makeText(this@InterventionActivity, msg, Toast.LENGTH_SHORT).show()
                             finishAndRemoveTask()
                             return@InterventionScreen
                         }
                         val scope = (application as HoldUpApp).preferencesManager
                         kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+                            if (isPenalized) {
+                                scope.recordProceedPenalty(5)
+                                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                                    Toast.makeText(this@InterventionActivity, "⚠️ 5 mindful points deducted for relapse", Toast.LENGTH_SHORT).show()
+                                }
+                            }
                             scope.recordProceedSession(targetPackage, minutes)
                             scope.saveLastChosenDuration(targetPackage, minutes)
                         }
@@ -160,7 +165,7 @@ fun InterventionScreen(
     isTestMode: Boolean = false,
     testType: InterventionType? = null,
     onWalkAway: (Boolean) -> Unit,
-    onOpenSession: (Int) -> Unit
+    onOpenSession: (Int, Boolean) -> Unit
 ) {
     val coroutineScope = rememberCoroutineScope()
     val prefs = HoldUpApp.instance.preferencesManager
@@ -176,9 +181,25 @@ fun InterventionScreen(
     var selectedAlternative by remember { mutableStateOf<AlternativeActivity?>(null) }
     var maxSessionMinutes by remember { mutableIntStateOf(15) }
 
+    var relapseState by remember { mutableStateOf(RelapseState()) }
+    var relapseRemainingSeconds by remember { mutableIntStateOf(0) }
     var isInterventionCompleted by remember { mutableStateOf(isSoftNudge) }
     var currentQuote by remember { mutableStateOf("") }
     var availableQuotes by remember { mutableStateOf<List<String>>(defaultReflections) }
+
+    // Countdown effect for Relapse Friction delay
+    LaunchedEffect(relapseRemainingSeconds) {
+        if (relapseRemainingSeconds > 0) {
+            kotlinx.coroutines.delay(1000L)
+            relapseRemainingSeconds -= 1
+            if (relapseRemainingSeconds == 0) {
+                if (activeInterventionType != InterventionType.BREATHING &&
+                    activeInterventionType != InterventionType.VIDEO) {
+                    isInterventionCompleted = true
+                }
+            }
+        }
+    }
 
     // Load app-specific or global configuration
     LaunchedEffect(targetPackageName) {
@@ -208,6 +229,15 @@ fun InterventionScreen(
         countdownSeconds = rule?.countdownSeconds ?: global.defaultCountdownSeconds
         val rememberedDuration = prefs.getLastChosenDuration(targetPackageName)
         maxSessionMinutes = rememberedDuration ?: rule?.maxSessionMinutes ?: global.defaultSessionMinutes
+
+        if (!isSoftNudge && !isTestMode && targetPackageName.isNotBlank()) {
+            val state = prefs.checkRelapseState(targetPackageName)
+            relapseState = state
+            if (state.isEscalated) {
+                relapseRemainingSeconds = state.delaySeconds
+                isInterventionCompleted = false
+            }
+        }
 
         if (testType != null) {
             activeInterventionType = testType
@@ -239,7 +269,9 @@ fun InterventionScreen(
         if (activeInterventionType == InterventionType.REFLECTION ||
             activeInterventionType == InterventionType.PHOTO ||
             activeInterventionType == InterventionType.ALTERNATIVES) {
-            isInterventionCompleted = true
+            if (!relapseState.isEscalated) {
+                isInterventionCompleted = true
+            }
         }
     }
 
@@ -322,6 +354,14 @@ fun InterventionScreen(
                     RealityCheckHeader(packageName = targetPackageName)
                 }
 
+                if (relapseState.isEscalated) {
+                    Spacer(modifier = Modifier.height(12.dp))
+                    RelapseFrictionBanner(
+                        state = relapseState,
+                        remainingSeconds = relapseRemainingSeconds
+                    )
+                }
+
                 Spacer(modifier = Modifier.height(16.dp))
 
                 // Body: Active Intervention Content
@@ -335,8 +375,12 @@ fun InterventionScreen(
                         when (activeInterventionType) {
                             InterventionType.BREATHING -> {
                                 BreathingOrb(
-                                    totalSeconds = breathingSeconds,
-                                    onCompleted = { isInterventionCompleted = true }
+                                    totalSeconds = maxOf(breathingSeconds, relapseRemainingSeconds),
+                                    onCompleted = {
+                                        if (relapseRemainingSeconds <= 0) {
+                                            isInterventionCompleted = true
+                                        }
+                                    }
                                 )
                             }
                             InterventionType.REFLECTION -> {
@@ -616,10 +660,14 @@ fun DecisionFooter(
                             modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp)
                         ) {
                             Text(
-                                text = if (appName.isNotBlank()) "Open $appName mindfully" else "Continue mindfully",
+                                text = if (appName.isNotBlank()) {
+                                    if (relapseState.isEscalated) "Open $appName mindfully (-5 pts)" else "Open $appName mindfully"
+                                } else {
+                                    if (relapseState.isEscalated) "Continue mindfully (-5 pts)" else "Continue mindfully"
+                                },
                                 style = MaterialTheme.typography.bodyMedium.copy(
-                                    fontWeight = FontWeight.Medium,
-                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.85f)
+                                    fontWeight = if (relapseState.isEscalated) FontWeight.SemiBold else FontWeight.Medium,
+                                    color = if (relapseState.isEscalated) Color(0xFFFFB74D) else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.85f)
                                 ),
                                 textAlign = androidx.compose.ui.text.style.TextAlign.Center
                             )
@@ -642,9 +690,9 @@ fun DecisionFooter(
                     Spacer(modifier = Modifier.height(4.dp))
 
                     Text(
-                        text = "A gentle nudge will sound when time is up",
+                        text = if (relapseState.isEscalated) "Relapse session: -5 mindful points will be deducted" else "A gentle nudge will sound when time is up",
                         style = MaterialTheme.typography.bodyMedium.copy(
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            color = if (relapseState.isEscalated) Color(0xFFFFB74D) else MaterialTheme.colorScheme.onSurfaceVariant
                         ),
                         textAlign = androidx.compose.ui.text.style.TextAlign.Center
                     )
@@ -752,10 +800,14 @@ fun DecisionFooter(
                     Button(
                         onClick = {
                             haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
-                            onOpenSession(selectedMinutes)
+                            onOpenSession(selectedMinutes, relapseState.isEscalated)
                         },
                         colors = ButtonDefaults.buttonColors(
-                            containerColor = MaterialTheme.colorScheme.primary,
+                            containerColor = if (relapseState.isEscalated) {
+                                Color(0xFFD84315)
+                            } else {
+                                MaterialTheme.colorScheme.primary
+                            },
                             contentColor = MaterialTheme.colorScheme.onPrimary
                         ),
                         shape = RoundedCornerShape(20.dp),
@@ -765,7 +817,13 @@ fun DecisionFooter(
                             .defaultMinSize(minHeight = 54.dp)
                     ) {
                         Text(
-                            text = if (isSoftNudge) "Continue for $selectedMinutes min" else "Enter for $selectedMinutes min",
+                            text = if (isSoftNudge) {
+                                "Continue for $selectedMinutes min"
+                            } else if (relapseState.isEscalated) {
+                                "Enter for $selectedMinutes min (-5 pts)"
+                            } else {
+                                "Enter for $selectedMinutes min"
+                            },
                             style = MaterialTheme.typography.titleMedium.copy(
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 15.sp
@@ -791,6 +849,76 @@ fun DecisionFooter(
                         )
                     }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun RelapseFrictionBanner(
+    state: RelapseState,
+    remainingSeconds: Int
+) {
+    val isSevere = state.tier >= 3
+    val containerColor = if (isSevere) {
+        MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.35f)
+    } else {
+        Color(0xFFFFA726).copy(alpha = 0.18f)
+    }
+    val contentColor = if (isSevere) {
+        MaterialTheme.colorScheme.error
+    } else {
+        Color(0xFFFFB74D)
+    }
+    val borderColor = contentColor.copy(alpha = 0.4f)
+
+    Surface(
+        shape = RoundedCornerShape(16.dp),
+        color = containerColor,
+        border = androidx.compose.foundation.BorderStroke(1.dp, borderColor),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(36.dp)
+                    .clip(CircleShape)
+                    .background(contentColor.copy(alpha = 0.15f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = if (remainingSeconds > 0) Icons.Default.Timer else Icons.Default.Warning,
+                    contentDescription = null,
+                    tint = contentColor,
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+            Spacer(modifier = Modifier.width(12.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = if (isSevere) {
+                        "⚠️ Relapse Alert • Open #${state.recentAttemptsCount} in 15m"
+                    } else {
+                        "⚠️ Relapse Friction • Open #${state.recentAttemptsCount} in 15m"
+                    },
+                    style = MaterialTheme.typography.labelLarge.copy(
+                        fontWeight = FontWeight.Bold,
+                        color = contentColor
+                    )
+                )
+                Text(
+                    text = if (remainingSeconds > 0) {
+                        "Mindful pause active: ${remainingSeconds}s remaining"
+                    } else {
+                        "Proceeding will deduct 5 mindful points"
+                    },
+                    style = MaterialTheme.typography.bodySmall.copy(
+                        color = contentColor.copy(alpha = 0.9f)
+                    )
+                )
             }
         }
     }
