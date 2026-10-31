@@ -3,9 +3,11 @@ package com.holdup.app.ui.components
 import androidx.compose.animation.*
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -179,8 +181,11 @@ fun QuotesManagementBottomSheet(
 
             // Filter Chips Row
             Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
                 QuoteFilter.entries.forEach { filter ->
                     val isSelected = selectedFilter == filter
@@ -198,7 +203,11 @@ fun QuotesManagementBottomSheet(
                             selectedFilter = filter
                         },
                         label = {
-                            Text("${filter.name.lowercase().replaceFirstChar { it.uppercase() }} ($count)")
+                            Text(
+                                text = "${filter.name.lowercase().replaceFirstChar { it.uppercase() }} ($count)",
+                                maxLines = 1,
+                                softWrap = false
+                            )
                         },
                         shape = RoundedCornerShape(12.dp)
                     )
@@ -245,6 +254,7 @@ fun QuotesManagementBottomSheet(
                     modifier = Modifier
                         .fillMaxWidth()
                         .weight(1f),
+                    contentPadding = PaddingValues(bottom = 24.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     items(filteredQuotes, key = { it }) { quote ->

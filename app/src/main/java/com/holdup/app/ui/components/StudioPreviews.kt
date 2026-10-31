@@ -342,7 +342,7 @@ fun VideoPreviewBanner(
                     )
                 )
                 Text(
-                    text = if (isSet) "Tap to preview playback" else "Short 5-10s clip from a friend",
+                    text = if (isSet) "Tap to preview" else "Short 5-10s clip from a friend",
                     style = MaterialTheme.typography.bodySmall.copy(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         fontSize = 11.sp
