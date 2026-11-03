@@ -42,7 +42,6 @@
             android:taskAffinity="com.sneakyzippy.holdup.intervention"
             android:launchMode="singleTask"
             android:excludeFromRecents="true"
-            android:noHistory="true"
             android:configChanges="orientation|screenSize|screenLayout|keyboardHidden" />
 
         <!-- Accessibility Service for Instant App Launch Interception -->

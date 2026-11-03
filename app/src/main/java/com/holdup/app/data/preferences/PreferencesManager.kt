@@ -437,6 +437,19 @@ class PreferencesManager(private val context: Context) {
         }
     }
 
+    val activeSessions: Flow<Map<String, Long>> = context.dataStore.data.map { prefs ->
+        val raw = prefs[KEY_ACTIVE_SESSIONS]
+        if (!raw.isNullOrBlank()) {
+            try {
+                json.decodeFromString<Map<String, Long>>(raw)
+            } catch (_: Exception) {
+                emptyMap()
+            }
+        } else {
+            emptyMap()
+        }
+    }
+
     suspend fun isSessionActive(packageName: String): Boolean {
         val prefs = context.dataStore.data.first()
         val raw = prefs[KEY_ACTIVE_SESSIONS] ?: return false

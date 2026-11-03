@@ -55,6 +55,14 @@ class InterventionActivity : ComponentActivity() {
         const val EXTRA_IS_TEST_MODE = "extra_is_test_mode"
         const val EXTRA_TEST_INTERVENTION_TYPE = "extra_test_intervention_type"
 
+        @Volatile
+        var isInterventionActive: Boolean = false
+            private set
+
+        @Volatile
+        var activeTargetPackage: String? = null
+            private set
+
         fun startTest(context: Context, type: InterventionType, targetPackage: String = "com.google.android.youtube") {
             val intent = Intent(context, InterventionActivity::class.java).apply {
                 putExtra(EXTRA_PACKAGE_NAME, targetPackage)
@@ -78,6 +86,11 @@ class InterventionActivity : ComponentActivity() {
             try { InterventionType.valueOf(it) } catch (_: Exception) { null }
         }
 
+        if (targetPackage.isNotBlank()) {
+            isInterventionActive = true
+            activeTargetPackage = targetPackage
+        }
+
         setContent {
             HoldUpTheme {
                 InterventionScreen(
@@ -86,8 +99,10 @@ class InterventionActivity : ComponentActivity() {
                     isTestMode = isTestMode,
                     testType = testType,
                     onWalkAway = { isAlternative ->
+                        isInterventionActive = false
+                        activeTargetPackage = null
                         if (targetPackage.isNotBlank()) {
-                            HoldUpAccessibilityService.suppressInterception(targetPackage, 3500L)
+                            HoldUpAccessibilityService.suppressInterception(targetPackage, 1500L)
                         }
                         if (isTestMode) {
                             Toast.makeText(
@@ -115,6 +130,8 @@ class InterventionActivity : ComponentActivity() {
                         finishAndRemoveTask()
                     },
                     onOpenSession = { minutes, isPenalized ->
+                        isInterventionActive = false
+                        activeTargetPackage = null
                         if (targetPackage.isNotBlank()) {
                             HoldUpAccessibilityService.suppressInterception(targetPackage, 2500L)
                         }
@@ -137,15 +154,12 @@ class InterventionActivity : ComponentActivity() {
                         }
                         SessionMonitorService.startSession(this@InterventionActivity, targetPackage, minutes)
 
-                        // Directly switch to the target app the user wanted to open
+                        // Directly switch to the target app the user wanted to open without resetting its task
                         if (targetPackage.isNotBlank()) {
                             try {
                                 val launchIntent = packageManager.getLaunchIntentForPackage(targetPackage)
                                 if (launchIntent != null) {
-                                    launchIntent.addFlags(
-                                        android.content.Intent.FLAG_ACTIVITY_NEW_TASK or
-                                        android.content.Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED
-                                    )
+                                    launchIntent.flags = android.content.Intent.FLAG_ACTIVITY_NEW_TASK
                                     startActivity(launchIntent)
                                 }
                             } catch (_: Exception) {}
@@ -154,6 +168,25 @@ class InterventionActivity : ComponentActivity() {
                     }
                 )
             }
+        }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        val newTarget = intent.getStringExtra(EXTRA_PACKAGE_NAME)
+        if (!newTarget.isNullOrBlank()) {
+            isInterventionActive = true
+            activeTargetPackage = newTarget
+        }
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        val current = intent?.getStringExtra(EXTRA_PACKAGE_NAME)
+        if (activeTargetPackage == current) {
+            isInterventionActive = false
+            activeTargetPackage = null
         }
     }
 }
@@ -447,6 +480,7 @@ fun InterventionScreen(
                     isSoftNudge = isSoftNudge,
                     targetPackageName = targetPackageName,
                     maxSessionMinutes = maxSessionMinutes,
+                    relapseState = relapseState,
                     selectedAlternative = selectedAlternative,
                     onWalkAway = { onWalkAway(selectedAlternative != null) },
                     onOpenSession = onOpenSession
@@ -521,9 +555,10 @@ fun DecisionFooter(
     isSoftNudge: Boolean,
     targetPackageName: String,
     maxSessionMinutes: Int = 15,
+    relapseState: RelapseState = RelapseState(),
     selectedAlternative: AlternativeActivity?,
     onWalkAway: () -> Unit,
-    onOpenSession: (Int) -> Unit
+    onOpenSession: (Int, Boolean) -> Unit
 ) {
     val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
     val context = androidx.compose.ui.platform.LocalContext.current
