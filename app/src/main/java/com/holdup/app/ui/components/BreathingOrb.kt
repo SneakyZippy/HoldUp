@@ -11,6 +11,9 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -28,15 +31,10 @@ import kotlin.math.ceil
 import kotlin.math.cos
 import kotlin.math.sin
 
-enum class BreathPhase(val title: String, val subtitle: String) {
-    INHALE("Breathe in", "Expand gently"),
-    HOLD("Hold", "Feel the stillness"),
-    EXHALE("Breathe out", "Release all tension")
-}
-
 @Composable
 fun BreathingOrb(
     totalSeconds: Int = 8,
+    isReady: Boolean = true,
     onCompleted: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
@@ -64,22 +62,26 @@ fun BreathingOrb(
         } catch (_: Exception) {}
     }
 
+    // Lock session duration once ready so async updates cannot cancel/reset an active breath session
+    val sessionSeconds = remember(isReady) { if (isReady) totalSeconds else 8 }
+
     val cycleDurationSec = when {
-        totalSeconds <= 5 -> totalSeconds.toFloat()
-        totalSeconds % 8 == 0 -> 8f
-        totalSeconds % 6 == 0 -> 6f
+        sessionSeconds <= 5 -> sessionSeconds.toFloat()
+        sessionSeconds % 8 == 0 -> 8f
+        sessionSeconds % 6 == 0 -> 6f
         else -> 8f
     }
 
     val animProgress = remember { Animatable(0f) }
 
-    LaunchedEffect(totalSeconds) {
+    LaunchedEffect(isReady, sessionSeconds) {
+        if (!isReady) return@LaunchedEffect
         triggerHaptic(45)
         animProgress.snapTo(0f)
         animProgress.animateTo(
             targetValue = 1f,
             animationSpec = tween(
-                durationMillis = totalSeconds * 1000,
+                durationMillis = sessionSeconds * 1000,
                 easing = LinearEasing
             )
         )
@@ -88,13 +90,16 @@ fun BreathingOrb(
     }
 
     val progressValue = animProgress.value
-    val totalMs = (totalSeconds * 1000).toFloat()
+    val isFinished = progressValue >= 0.999f
+    val totalMs = (sessionSeconds * 1000).toFloat()
     val elapsedMs = progressValue * totalMs
     val cycleMs = cycleDurationSec * 1000f
-    val cycleProgress = (elapsedMs % cycleMs) / cycleMs
+    val cycleProgress = if (cycleMs > 0) (elapsedMs % cycleMs) / cycleMs else 0f
 
     // 3-Phase Breathwork: Inhale 42%, Hold 16%, Exhale 42%
     val (phase, phaseProgress) = when {
+        !isReady -> BreathPhase.INHALE to 0f
+        isFinished -> BreathPhase.EXHALE to 1f
         cycleProgress < 0.42f -> BreathPhase.INHALE to (cycleProgress / 0.42f).coerceIn(0f, 1f)
         cycleProgress < 0.58f -> BreathPhase.HOLD to ((cycleProgress - 0.42f) / 0.16f).coerceIn(0f, 1f)
         else -> BreathPhase.EXHALE to ((cycleProgress - 0.58f) / 0.42f).coerceIn(0f, 1f)
@@ -102,7 +107,7 @@ fun BreathingOrb(
 
     var lastPhase by remember { mutableStateOf(phase) }
     LaunchedEffect(phase) {
-        if (lastPhase != phase && progressValue > 0.03f && progressValue < 0.97f) {
+        if (isReady && !isFinished && lastPhase != phase && progressValue > 0.03f && progressValue < 0.97f) {
             triggerHaptic(if (phase == BreathPhase.HOLD) 25 else 35)
         }
         lastPhase = phase
@@ -110,30 +115,31 @@ fun BreathingOrb(
 
     val minScale = 0.62f
     val maxScale = 1.0f
-    val currentScale = when (phase) {
-        BreathPhase.INHALE -> {
+    val currentScale = when {
+        !isReady || isFinished -> minScale
+        phase == BreathPhase.INHALE -> {
             val eased = ((1.0 - cos(phaseProgress * PI)) / 2.0).toFloat()
             minScale + (maxScale - minScale) * eased
         }
-        BreathPhase.HOLD -> {
-            // Subtle serene micro-breath pulse
+        phase == BreathPhase.HOLD -> {
             val shimmer = sin(phaseProgress * PI * 2).toFloat() * 0.015f
             maxScale + shimmer
         }
-        BreathPhase.EXHALE -> {
+        else -> {
             val eased = ((1.0 - cos(phaseProgress * PI)) / 2.0).toFloat()
             maxScale - (maxScale - minScale) * eased
         }
     }
 
-    val rotationDeg = when (phase) {
-        BreathPhase.INHALE -> phaseProgress * 24f
-        BreathPhase.HOLD -> 24f + phaseProgress * 4f
-        BreathPhase.EXHALE -> 28f - phaseProgress * 28f
+    val rotationDeg = when {
+        !isReady || isFinished -> 0f
+        phase == BreathPhase.INHALE -> phaseProgress * 24f
+        phase == BreathPhase.HOLD -> 24f + phaseProgress * 4f
+        else -> 28f - phaseProgress * 28f
     }
 
-    val sweepAngle = progressValue * 360f
-    val remainingSeconds = ceil((1f - progressValue) * totalSeconds).toInt().coerceAtLeast(0)
+    val sweepAngle = if (isFinished) 360f else (progressValue * 360f)
+    val remainingSeconds = if (isFinished) 0 else ceil((1f - progressValue) * sessionSeconds).toInt().coerceAtLeast(0)
 
     Column(
         modifier = modifier.fillMaxWidth(),
@@ -216,58 +222,12 @@ fun BreathingOrb(
             }
 
             // Center Text & Countdown
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center
-            ) {
-                AnimatedContent(
-                    targetState = phase,
-                    transitionSpec = {
-                        fadeIn(tween(350)) togetherWith fadeOut(tween(350))
-                    },
-                    label = "PhaseTransition"
-                ) { targetPhase ->
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text(
-                            text = targetPhase.title,
-                            style = MaterialTheme.typography.titleLarge.copy(
-                                fontWeight = FontWeight.SemiBold,
-                                fontSize = 23.sp,
-                                letterSpacing = (-0.2).sp,
-                                color = Color.White
-                            )
-                        )
-                        Spacer(modifier = Modifier.height(3.dp))
-                        Text(
-                            text = targetPhase.subtitle,
-                            style = MaterialTheme.typography.labelSmall.copy(
-                                color = Color.White.copy(alpha = 0.75f),
-                                fontWeight = FontWeight.Normal,
-                                fontSize = 11.sp,
-                                letterSpacing = 0.4.sp
-                            )
-                        )
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(10.dp))
-
-                Surface(
-                    shape = CircleShape,
-                    color = Color.Black.copy(alpha = 0.38f),
-                    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.16f))
-                ) {
-                    Text(
-                        text = "${remainingSeconds}s",
-                        style = MaterialTheme.typography.labelMedium.copy(
-                            fontWeight = FontWeight.Bold,
-                            color = Color.White.copy(alpha = 0.95f),
-                            fontSize = 12.sp
-                        ),
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 3.dp)
-                    )
-                }
-            }
+            BreathingCenterContent(
+                isFinished = isFinished,
+                isReady = isReady,
+                phase = phase,
+                remainingSeconds = remainingSeconds
+            )
         }
 
         Spacer(modifier = Modifier.height(24.dp))

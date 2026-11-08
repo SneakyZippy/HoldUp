@@ -208,6 +208,7 @@ fun InterventionScreen(
     val coroutineScope = rememberCoroutineScope()
     val prefs = HoldUpApp.instance.preferencesManager
 
+    var isConfigLoaded by remember { mutableStateOf(false) }
     var activeInterventionType by remember { mutableStateOf(InterventionType.BREATHING) }
     var breathingSeconds by remember { mutableIntStateOf(8) }
     var countdownSeconds by remember { mutableIntStateOf(10) }
@@ -229,6 +230,7 @@ fun InterventionScreen(
 
     LaunchedEffect(isInterventionCompleted) {
         if (isInterventionCompleted) {
+            kotlinx.coroutines.delay(120L)
             scrollState.animateScrollTo(scrollState.maxValue)
         }
     }
@@ -319,6 +321,9 @@ fun InterventionScreen(
                 isInterventionCompleted = true
             }
         }
+
+        // Configuration is fully loaded and stabilized before starting timer
+        isConfigLoaded = true
     }
 
     BackHandler {
@@ -455,6 +460,7 @@ fun InterventionScreen(
                             InterventionType.BREATHING -> {
                                 BreathingOrb(
                                     totalSeconds = effectiveFrictionSeconds,
+                                    isReady = isConfigLoaded,
                                     onCompleted = {
                                         isInterventionCompleted = true
                                     }

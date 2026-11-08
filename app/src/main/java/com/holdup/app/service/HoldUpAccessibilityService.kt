@@ -114,12 +114,15 @@ class HoldUpAccessibilityService : AccessibilityService() {
         // Check if intervention is currently active for this package (e.g. game loading screen finished
         // and game tried to pop up its main activity over the intervention activity)
         if (InterventionActivity.isInterventionActive && InterventionActivity.activeTargetPackage == targetPackageName) {
-            val bringToFrontIntent = Intent(this, InterventionActivity::class.java).apply {
-                putExtra(InterventionActivity.EXTRA_PACKAGE_NAME, targetPackageName)
-                putExtra(InterventionActivity.EXTRA_IS_SOFT_NUDGE, false)
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+            if (now - lastInterceptTime >= 1500L) {
+                lastInterceptTime = now
+                val bringToFrontIntent = Intent(this, InterventionActivity::class.java).apply {
+                    putExtra(InterventionActivity.EXTRA_PACKAGE_NAME, targetPackageName)
+                    putExtra(InterventionActivity.EXTRA_IS_SOFT_NUDGE, false)
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                }
+                startActivity(bringToFrontIntent)
             }
-            startActivity(bringToFrontIntent)
             return
         }
 
