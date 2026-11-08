@@ -17,6 +17,7 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.holdup.app.ui.components.AccentThemePickerCard
 import com.holdup.app.ui.components.PinSetupDialog
 import com.holdup.app.ui.components.PinVerifyDialog
 import com.holdup.app.ui.theme.*
@@ -34,7 +35,9 @@ fun SettingsTab(
     onOpenUsageSettings: () -> Unit,
     onReplayOnboarding: () -> Unit,
     isRelapseResistanceEnabled: Boolean = true,
-    onSetRelapseResistanceEnabled: (Boolean) -> Unit = {}
+    onSetRelapseResistanceEnabled: (Boolean) -> Unit = {},
+    currentAccentPreset: AccentPreset = AccentPreset.DEFAULT,
+    onSelectAccentPreset: (AccentPreset) -> Unit = {}
 ) {
     val haptic = LocalHapticFeedback.current
 
@@ -64,6 +67,14 @@ fun SettingsTab(
             Text(
                 text = "Strict protection, parent PIN, and system permissions",
                 style = MaterialTheme.typography.bodyMedium.copy(color = MaterialTheme.colorScheme.onSurfaceVariant)
+            )
+        }
+
+        // Accent Theme Customization
+        item {
+            AccentThemePickerCard(
+                currentPreset = currentAccentPreset,
+                onSelectPreset = onSelectAccentPreset
             )
         }
 

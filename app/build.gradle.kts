@@ -80,4 +80,7 @@ dependencies {
 
     // Debug Tooling
     debugImplementation(libs.compose.ui.tooling)
+
+    // Unit Testing
+    testImplementation(kotlin("test"))
 }

@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.datastore.preferences.core.*
 import androidx.datastore.preferences.preferencesDataStore
 import com.holdup.app.data.model.*
+import com.holdup.app.ui.theme.AccentPreset
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.first
@@ -50,6 +51,7 @@ class PreferencesManager(private val context: Context) {
         private val KEY_LAST_INTERRUPTION_TIMESTAMP = longPreferencesKey("last_interruption_timestamp")
         private val KEY_CLEAN_HOURS_AWARDED_TODAY = intPreferencesKey("clean_hours_awarded_today")
         private val KEY_CLEAN_DAY_BONUS_AWARDED = booleanPreferencesKey("clean_day_bonus_awarded")
+        private val KEY_ACCENT_COLOR_PRESET = stringPreferencesKey("accent_color_preset")
 
         // Popular doomscroll apps pre-populated as defaults
         val DEFAULT_TARGET_PACKAGES = setOf(
@@ -128,6 +130,16 @@ class PreferencesManager(private val context: Context) {
     suspend fun setRelapseResistanceEnabled(enabled: Boolean) {
         context.dataStore.edit { prefs ->
             prefs[KEY_RELAPSE_RESISTANCE_ENABLED] = enabled
+        }
+    }
+
+    val accentPreset: Flow<AccentPreset> = context.dataStore.data.map { prefs ->
+        AccentPreset.fromKey(prefs[KEY_ACCENT_COLOR_PRESET])
+    }
+
+    suspend fun setAccentPreset(preset: AccentPreset) {
+        context.dataStore.edit { prefs ->
+            prefs[KEY_ACCENT_COLOR_PRESET] = preset.key
         }
     }
 

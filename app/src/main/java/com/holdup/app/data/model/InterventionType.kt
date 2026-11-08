@@ -40,10 +40,10 @@ object InterventionTypeSerializer : KSerializer<InterventionType> {
 
 @Serializable(with = RuleModeSerializer::class)
 enum class RuleMode(val displayName: String) {
-    ROTATE("Rotate (In Turn)"),
-    SHUFFLE("Shuffle (Balanced)"),
+    ROTATE("In Sequence"),
+    SHUFFLE("Smart Shuffle"),
     RANDOM("Pure Random"),
-    SPECIFIC("Specific Intervention"),
+    SPECIFIC("Single Fixed Pause"),
     SEQUENCE("Multi-Step Pause")
 }
 

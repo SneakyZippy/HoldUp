@@ -6,17 +6,24 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
 
-private val DarkColorScheme = darkColorScheme(
-    primary = ZenSage,
-    onPrimary = ZenBackground,
-    primaryContainer = ZenSageContainer,
-    onPrimaryContainer = ZenSage,
+val LocalAccentPreset = staticCompositionLocalOf { AccentPreset.DEFAULT }
+
+/**
+ * Builds a mindful dark color scheme dynamically tuned with the active accent preset.
+ */
+fun buildColorScheme(accent: AccentPreset) = darkColorScheme(
+    primary = accent.primary,
+    onPrimary = accent.onPrimary,
+    primaryContainer = accent.primaryContainer,
+    onPrimaryContainer = accent.onPrimaryContainer,
     secondary = ZenLavender,
     onSecondary = ZenBackground,
     secondaryContainer = ZenLavenderContainer,
@@ -42,6 +49,7 @@ private val DarkColorScheme = darkColorScheme(
 
 @Composable
 fun HoldUpTheme(
+    accentPreset: AccentPreset = AccentPreset.DEFAULT,
     dynamicColor: Boolean = false,
     content: @Composable () -> Unit
 ) {
@@ -50,7 +58,7 @@ fun HoldUpTheme(
         dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
             dynamicDarkColorScheme(context)
         }
-        else -> DarkColorScheme
+        else -> buildColorScheme(accentPreset)
     }
 
     val view = LocalView.current
@@ -70,9 +78,11 @@ fun HoldUpTheme(
         }
     }
 
-    MaterialTheme(
-        colorScheme = colorScheme,
-        typography = Typography,
-        content = content
-    )
+    CompositionLocalProvider(LocalAccentPreset provides accentPreset) {
+        MaterialTheme(
+            colorScheme = colorScheme,
+            typography = Typography,
+            content = content
+        )
+    }
 }

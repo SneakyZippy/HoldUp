@@ -43,6 +43,7 @@ import com.holdup.app.ui.theme.*
 import android.content.Intent
 import android.widget.Toast
 import androidx.compose.foundation.shape.CircleShape
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlin.random.Random
@@ -92,7 +93,9 @@ class InterventionActivity : ComponentActivity() {
         }
 
         setContent {
-            HoldUpTheme {
+            val accentPreset by (application as HoldUpApp).preferencesManager.accentPreset
+                .collectAsStateWithLifecycle(initialValue = AccentPreset.DEFAULT)
+            HoldUpTheme(accentPreset = accentPreset) {
                 InterventionScreen(
                     targetPackageName = targetPackage,
                     isSoftNudge = isSoftNudge,

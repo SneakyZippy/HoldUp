@@ -55,6 +55,7 @@ import com.holdup.app.service.HoldUpAccessibilityService
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.geometry.Offset
 import com.holdup.app.ui.components.*
+import com.holdup.app.ui.dashboard.DashboardTab
 import com.holdup.app.ui.onboarding.OnboardingScreen
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.verticalScroll
@@ -72,8 +73,17 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
 
         setContent {
-            HoldUpTheme {
-                MainScreen()
+            val accentPreset by HoldUpApp.instance.preferencesManager.accentPreset
+                .collectAsStateWithLifecycle(initialValue = AccentPreset.DEFAULT)
+            HoldUpTheme(accentPreset = accentPreset) {
+                MainScreen(
+                    accentPreset = accentPreset,
+                    onSelectAccentPreset = { preset ->
+                        HoldUpApp.instance.applicationScope.launch {
+                            HoldUpApp.instance.preferencesManager.setAccentPreset(preset)
+                        }
+                    }
+                )
             }
         }
     }
@@ -81,7 +91,10 @@ class MainActivity : ComponentActivity() {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun MainScreen() {
+fun MainScreen(
+    accentPreset: AccentPreset = AccentPreset.DEFAULT,
+    onSelectAccentPreset: (AccentPreset) -> Unit = {}
+) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
     val prefs = HoldUpApp.instance.preferencesManager
@@ -190,8 +203,9 @@ fun MainScreen() {
         containerColor = MaterialTheme.colorScheme.background,
         bottomBar = {
             NavigationBar(
-                containerColor = ZenBackground,
-                tonalElevation = 0.dp
+                containerColor = ZenSurface.copy(alpha = 0.95f),
+                tonalElevation = 0.dp,
+                modifier = Modifier.border(BorderStroke(1.dp, ZenBorderSubtle))
             ) {
                 NavigationBarItem(
                     selected = currentTab == 0,
@@ -201,7 +215,7 @@ fun MainScreen() {
                     colors = NavigationBarItemDefaults.colors(
                         selectedIconColor = MaterialTheme.colorScheme.primary,
                         selectedTextColor = MaterialTheme.colorScheme.primary,
-                        indicatorColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
+                        indicatorColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.16f),
                         unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
                         unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -214,7 +228,7 @@ fun MainScreen() {
                     colors = NavigationBarItemDefaults.colors(
                         selectedIconColor = MaterialTheme.colorScheme.primary,
                         selectedTextColor = MaterialTheme.colorScheme.primary,
-                        indicatorColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
+                        indicatorColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.16f),
                         unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
                         unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -227,7 +241,7 @@ fun MainScreen() {
                     colors = NavigationBarItemDefaults.colors(
                         selectedIconColor = MaterialTheme.colorScheme.primary,
                         selectedTextColor = MaterialTheme.colorScheme.primary,
-                        indicatorColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
+                        indicatorColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.16f),
                         unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
                         unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -240,7 +254,7 @@ fun MainScreen() {
                     colors = NavigationBarItemDefaults.colors(
                         selectedIconColor = MaterialTheme.colorScheme.primary,
                         selectedTextColor = MaterialTheme.colorScheme.primary,
-                        indicatorColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
+                        indicatorColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.16f),
                         unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
                         unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -330,7 +344,9 @@ fun MainScreen() {
                     isRelapseResistanceEnabled = isRelapseResistanceEnabled,
                     onSetRelapseResistanceEnabled = { enabled ->
                         coroutineScope.launch { prefs.setRelapseResistanceEnabled(enabled) }
-                    }
+                    },
+                    currentAccentPreset = accentPreset,
+                    onSelectAccentPreset = onSelectAccentPreset
                 )
             }
         }
@@ -520,708 +536,6 @@ fun AccessibilityDisclosureDialog(
         shape = RoundedCornerShape(26.dp),
         containerColor = MaterialTheme.colorScheme.surfaceContainer
     )
-}
-
-@Composable
-fun DashboardTab(
-    isMonitoringEnabled: Boolean,
-    onToggleMonitoring: (Boolean) -> Unit,
-    todayStats: DailyStats,
-    monitoredPackages: Set<String>,
-    isAccessibilityGranted: Boolean,
-    isUsageAccessGranted: Boolean,
-    onOpenAccessibilitySettings: () -> Unit,
-    onOpenUsageSettings: () -> Unit,
-    onOpenTour: () -> Unit = {},
-    isChildSafetyEnabled: Boolean = false
-) {
-    val context = LocalContext.current
-    val haptic = LocalHapticFeedback.current
-
-    val installedShieldedPackages = remember(monitoredPackages) {
-        val pm = context.packageManager
-        monitoredPackages.filter { pkg ->
-            try {
-                pm.getPackageInfo(pkg, 0)
-                true
-            } catch (_: Exception) {
-                false
-            }
-        }
-    }
-
-    LazyColumn(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(horizontal = 20.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
-    ) {
-        // App Bar & Master Toggle
-        item {
-            Spacer(modifier = Modifier.height(10.dp))
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Image(
-                        painter = painterResource(id = com.holdup.app.R.drawable.ic_holdup_logo),
-                        contentDescription = "HoldUp Turtle Logo",
-                        modifier = Modifier
-                            .size(44.dp)
-                            .clip(CircleShape)
-                    )
-                    Spacer(modifier = Modifier.width(12.dp))
-                    Column {
-                        Text(
-                            text = "HoldUp",
-                            style = MaterialTheme.typography.headlineLarge.copy(
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 26.sp,
-                                color = MaterialTheme.colorScheme.onBackground
-                            )
-                        )
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(6.dp)
-                                    .clip(CircleShape)
-                                    .background(
-                                        if (isChildSafetyEnabled || isMonitoringEnabled) MaterialTheme.colorScheme.primary
-                                        else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
-                                    )
-                            )
-                            Text(
-                                text = if (isChildSafetyEnabled) "Hard Lockout Active" else if (isMonitoringEnabled) "Mindful Shield Active" else "Shield Paused",
-                                style = MaterialTheme.typography.labelSmall.copy(
-                                    color = if (isChildSafetyEnabled || isMonitoringEnabled) MaterialTheme.colorScheme.primary
-                                    else MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            )
-                        }
-                    }
-                    Spacer(modifier = Modifier.width(8.dp))
-                    IconButton(
-                        onClick = onOpenTour,
-                        modifier = Modifier.size(32.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Info,
-                            contentDescription = "Tour",
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-                            modifier = Modifier.size(18.dp)
-                        )
-                    }
-                }
-
-                Switch(
-                    checked = isMonitoringEnabled,
-                    onCheckedChange = {
-                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                        onToggleMonitoring(it)
-                    },
-                    colors = SwitchDefaults.colors(
-                        checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
-                        checkedTrackColor = MaterialTheme.colorScheme.primary,
-                        uncheckedThumbColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                        uncheckedTrackColor = MaterialTheme.colorScheme.surfaceContainerHighest
-                    )
-                )
-            }
-        }
-
-        // Setup Alert if permissions missing
-        if (!isAccessibilityGranted || !isUsageAccessGranted) {
-            item {
-                Surface(
-                    shape = RoundedCornerShape(20.dp),
-                    color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.35f),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.25f)),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Column(modifier = Modifier.padding(20.dp)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(
-                                imageVector = Icons.Default.Shield,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.error
-                            )
-                            Spacer(modifier = Modifier.width(10.dp))
-                            Text(
-                                text = "Setup Required",
-                                style = MaterialTheme.typography.titleMedium.copy(
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = MaterialTheme.colorScheme.onErrorContainer
-                                )
-                            )
-                        }
-
-                        Spacer(modifier = Modifier.height(6.dp))
-                        Text(
-                            text = "To pause doomscrolling when apps open, HoldUp needs accessibility and usage access permissions enabled.",
-                            style = MaterialTheme.typography.bodyMedium.copy(
-                                color = MaterialTheme.colorScheme.onErrorContainer.copy(alpha = 0.9f)
-                            )
-                        )
-
-                        Spacer(modifier = Modifier.height(14.dp))
-
-                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                            if (!isAccessibilityGranted) {
-                                Button(
-                                    onClick = onOpenAccessibilitySettings,
-                                    colors = ButtonDefaults.buttonColors(
-                                        containerColor = MaterialTheme.colorScheme.error,
-                                        contentColor = MaterialTheme.colorScheme.onError
-                                    ),
-                                    shape = RoundedCornerShape(14.dp)
-                                ) {
-                                    Text("Enable Interceptor", fontWeight = FontWeight.SemiBold)
-                                }
-                            }
-                            if (!isUsageAccessGranted) {
-                                OutlinedButton(
-                                    onClick = onOpenUsageSettings,
-                                    shape = RoundedCornerShape(14.dp),
-                                    border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.4f))
-                                ) {
-                                    Text("Usage Access", color = MaterialTheme.colorScheme.onErrorContainer)
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        // Mindful Wins Gauge Hero Card
-        item {
-            Surface(
-                shape = RoundedCornerShape(24.dp),
-                color = MaterialTheme.colorScheme.surfaceContainer,
-                border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.08f)),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Column(
-                    modifier = Modifier.padding(22.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = "TODAY'S INTENTION",
-                            style = MaterialTheme.typography.labelSmall.copy(
-                                letterSpacing = 1.2.sp,
-                                color = MaterialTheme.colorScheme.primary,
-                                fontWeight = FontWeight.Bold
-                            )
-                        )
-
-                        Surface(
-                            shape = RoundedCornerShape(12.dp),
-                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
-                            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.25f))
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Timelapse,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.size(13.dp)
-                                )
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text(
-                                    text = "~${todayStats.estimatedMinutesSaved}m saved",
-                                    style = MaterialTheme.typography.labelSmall.copy(
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = MaterialTheme.colorScheme.primary
-                                    )
-                                )
-                            }
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(20.dp))
-
-                    // Circular Progress Dial
-                    val targetProgress = if (todayStats.totalInterceptions > 0) {
-                        (todayStats.walkedAwayCount.toFloat() / todayStats.totalInterceptions.toFloat())
-                    } else {
-                        1f
-                    }
-                    val animatedProgress by animateFloatAsState(
-                        targetValue = targetProgress,
-                        animationSpec = tween(1200),
-                        label = "GaugeProgress"
-                    )
-
-                    val gaugeColor = MaterialTheme.colorScheme.primary
-                    val secondaryColor = MaterialTheme.colorScheme.secondary
-                    val trackColor = Color.White.copy(alpha = 0.06f)
-
-                    Box(
-                        modifier = Modifier.size(175.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Canvas(modifier = Modifier.fillMaxSize()) {
-                            val strokeWidth = 12.dp.toPx()
-                            val center = Offset(size.width / 2f, size.height / 2f)
-                            val radius = (size.minDimension - strokeWidth) / 2f
-
-                            // Soft ambient glow behind percentage
-                            drawCircle(
-                                brush = Brush.radialGradient(
-                                    colors = listOf(
-                                        gaugeColor.copy(alpha = 0.12f),
-                                        Color.Transparent
-                                    ),
-                                    center = center,
-                                    radius = radius * 0.85f
-                                ),
-                                radius = radius * 0.85f,
-                                center = center
-                            )
-
-                            // Background circular track
-                            drawCircle(
-                                color = trackColor,
-                                radius = radius,
-                                center = center,
-                                style = Stroke(width = strokeWidth)
-                            )
-
-                            // Animated progress arc
-                            drawArc(
-                                brush = Brush.sweepGradient(
-                                    listOf(
-                                        gaugeColor.copy(alpha = 0.7f),
-                                        gaugeColor,
-                                        secondaryColor
-                                    )
-                                ),
-                                startAngle = -90f,
-                                sweepAngle = 360f * animatedProgress,
-                                useCenter = false,
-                                style = Stroke(width = strokeWidth, cap = StrokeCap.Round)
-                            )
-                        }
-
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text(
-                                text = "${todayStats.successRatePercent}%",
-                                style = MaterialTheme.typography.headlineLarge.copy(
-                                    fontSize = 40.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    letterSpacing = (-1).sp,
-                                    color = MaterialTheme.colorScheme.onSurface
-                                )
-                            )
-                            Text(
-                                text = "Mindful Win Rate",
-                                style = MaterialTheme.typography.labelSmall.copy(
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    fontWeight = FontWeight.Medium
-                                )
-                            )
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(20.dp))
-
-                    // Triple Stat Pill Row
-                    Surface(
-                        shape = RoundedCornerShape(16.dp),
-                        color = Color.White.copy(alpha = 0.03f),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.05f)),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 12.dp),
-                            horizontalArrangement = Arrangement.SpaceEvenly,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Text(
-                                    text = "${todayStats.walkedAwayCount}",
-                                    style = MaterialTheme.typography.titleLarge.copy(
-                                        color = MaterialTheme.colorScheme.primary,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                )
-                                Text(text = "Walked Away", style = MaterialTheme.typography.labelSmall)
-                            }
-
-                            VerticalDivider(
-                                modifier = Modifier.height(26.dp),
-                                color = Color.White.copy(alpha = 0.08f)
-                            )
-
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Text(
-                                    text = "${todayStats.proceededCount}",
-                                    style = MaterialTheme.typography.titleLarge.copy(
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                )
-                                Text(text = "Mindful Opens", style = MaterialTheme.typography.labelSmall)
-                            }
-
-                            VerticalDivider(
-                                modifier = Modifier.height(26.dp),
-                                color = Color.White.copy(alpha = 0.08f)
-                            )
-
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Text(
-                                    text = "${installedShieldedPackages.size}",
-                                    style = MaterialTheme.typography.titleLarge.copy(
-                                        color = MaterialTheme.colorScheme.secondary,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                )
-                                Text(text = "Shielded Apps", style = MaterialTheme.typography.labelSmall)
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        // Clean Focus Hero Card
-        item {
-            Surface(
-                shape = RoundedCornerShape(24.dp),
-                color = MaterialTheme.colorScheme.surfaceContainer,
-                border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.08f)),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Column(
-                    modifier = Modifier.padding(20.dp)
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Surface(
-                                shape = CircleShape,
-                                color = Color(0xFF4CAF50).copy(alpha = 0.15f),
-                                border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF4CAF50).copy(alpha = 0.3f)),
-                                modifier = Modifier.size(42.dp)
-                            ) {
-                                Box(contentAlignment = Alignment.Center) {
-                                    Icon(
-                                        imageVector = Icons.Default.SelfImprovement,
-                                        contentDescription = null,
-                                        tint = Color(0xFF4CAF50),
-                                        modifier = Modifier.size(22.dp)
-                                    )
-                                }
-                            }
-                            Spacer(modifier = Modifier.width(12.dp))
-                            Column {
-                                Text(
-                                    text = "Clean Focus",
-                                    style = MaterialTheme.typography.titleMedium.copy(
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                )
-                                Text(
-                                    text = if (todayStats.cleanFocusMinutesToday >= 60) {
-                                        "${todayStats.currentCleanStreakHours}h ${todayStats.currentCleanStreakMinutesPart}m without shielded apps"
-                                    } else {
-                                        "${todayStats.cleanFocusMinutesToday}m clean streak (08:00 - 22:00)"
-                                    },
-                                    style = MaterialTheme.typography.bodySmall.copy(
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                )
-                            }
-                        }
-
-                        // Daily Zen Bonus Badge
-                        Surface(
-                            shape = RoundedCornerShape(12.dp),
-                            color = if (todayStats.totalInterceptions == 0) Color(0xFF4CAF50).copy(alpha = 0.15f)
-                            else if (todayStats.totalInterceptions in 1..2 && todayStats.proceededCount == 0) Color(0xFFFFA726).copy(alpha = 0.15f)
-                            else Color.White.copy(alpha = 0.05f),
-                            border = androidx.compose.foundation.BorderStroke(
-                                1.dp,
-                                if (todayStats.totalInterceptions == 0) Color(0xFF4CAF50).copy(alpha = 0.35f)
-                                else if (todayStats.totalInterceptions in 1..2 && todayStats.proceededCount == 0) Color(0xFFFFA726).copy(alpha = 0.35f)
-                                else Color.White.copy(alpha = 0.1f)
-                            )
-                        ) {
-                            Text(
-                                text = todayStats.cleanDayBonusStatus,
-                                style = MaterialTheme.typography.labelSmall.copy(
-                                    fontWeight = FontWeight.Bold,
-                                    color = if (todayStats.totalInterceptions == 0) Color(0xFF4CAF50)
-                                    else if (todayStats.totalInterceptions in 1..2 && todayStats.proceededCount == 0) Color(0xFFFFA726)
-                                    else MaterialTheme.colorScheme.onSurfaceVariant
-                                ),
-                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
-                            )
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(16.dp))
-
-                    // Progress to Next Point Drop
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = "+${todayStats.cleanFocusHoursAwarded * 10} pts from focus today",
-                            style = MaterialTheme.typography.bodySmall.copy(
-                                fontWeight = FontWeight.SemiBold,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                        )
-                        Text(
-                            text = "${todayStats.minutesToNextFocusPoint}m to next +10 pts",
-                            style = MaterialTheme.typography.bodySmall.copy(
-                                color = MaterialTheme.colorScheme.primary,
-                                fontWeight = FontWeight.Medium
-                            )
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.height(8.dp))
-
-                    LinearProgressIndicator(
-                        progress = { todayStats.focusHourProgress },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(8.dp)
-                            .clip(RoundedCornerShape(4.dp)),
-                        color = MaterialTheme.colorScheme.primary,
-                        trackColor = Color.White.copy(alpha = 0.08f)
-                    )
-                }
-            }
-        }
-
-        // Mindful Points & Level Progress Card
-        item {
-            Surface(
-                shape = RoundedCornerShape(24.dp),
-                color = MaterialTheme.colorScheme.surfaceContainer,
-                border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.08f)),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Column(
-                    modifier = Modifier.padding(20.dp)
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Surface(
-                                shape = CircleShape,
-                                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
-                                border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.25f)),
-                                modifier = Modifier.size(42.dp)
-                            ) {
-                                Box(contentAlignment = Alignment.Center) {
-                                    Icon(
-                                        imageVector = Icons.Default.EmojiEvents,
-                                        contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.primary,
-                                        modifier = Modifier.size(22.dp)
-                                    )
-                                }
-                            }
-                            Spacer(modifier = Modifier.width(12.dp))
-                            Column {
-                                Text(
-                                    text = todayStats.userLevel,
-                                    style = MaterialTheme.typography.titleMedium.copy(
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                )
-                                Text(
-                                    text = "Tier ${todayStats.currentLevelNumber} • ${todayStats.lifetimePoints} total pts",
-                                    style = MaterialTheme.typography.bodySmall.copy(
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                )
-                            }
-                        }
-
-                        Surface(
-                            shape = RoundedCornerShape(12.dp),
-                            color = MaterialTheme.colorScheme.secondary.copy(alpha = 0.12f),
-                            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.secondary.copy(alpha = 0.25f))
-                        ) {
-                            Text(
-                                text = "+${todayStats.pointsEarnedToday} pts today",
-                                style = MaterialTheme.typography.labelMedium.copy(
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.secondary
-                                ),
-                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
-                            )
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(16.dp))
-
-                    val prevTierTarget = when (todayStats.currentLevelNumber) {
-                        1 -> 0
-                        2 -> 100
-                        3 -> 300
-                        4 -> 600
-                        5 -> 1000
-                        else -> 0
-                    }
-                    val targetDelta = (todayStats.nextLevelTarget - prevTierTarget).coerceAtLeast(1)
-                    val currentProgress = ((todayStats.lifetimePoints - prevTierTarget).toFloat() / targetDelta.toFloat())
-                        .coerceIn(0f, 1f)
-
-                    Column {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Text(
-                                text = "Next tier: ${todayStats.nextLevelTarget} pts",
-                                style = MaterialTheme.typography.labelSmall.copy(
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            )
-                            val remaining = (todayStats.nextLevelTarget - todayStats.lifetimePoints).coerceAtLeast(0)
-                            Text(
-                                text = if (remaining > 0) "$remaining pts to go" else "Max tier reached!",
-                                style = MaterialTheme.typography.labelSmall.copy(
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = MaterialTheme.colorScheme.primary
-                                )
-                            )
-                        }
-                        Spacer(modifier = Modifier.height(8.dp))
-                        LinearProgressIndicator(
-                            progress = { currentProgress },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(6.dp)
-                                .clip(RoundedCornerShape(3.dp)),
-                            color = MaterialTheme.colorScheme.primary,
-                            trackColor = Color.White.copy(alpha = 0.06f)
-                        )
-                    }
-                }
-            }
-        }
-
-        // Active Shielded Apps Quick Carousel
-        if (installedShieldedPackages.isNotEmpty()) {
-            item {
-                Column {
-                    Text(
-                        text = "Active Shields",
-                        style = MaterialTheme.typography.titleLarge.copy(
-                            fontSize = 17.sp,
-                            fontWeight = FontWeight.SemiBold
-                        ),
-                        modifier = Modifier.padding(bottom = 10.dp)
-                    )
-
-                    LazyRow(
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        items(installedShieldedPackages) { pkg ->
-                            val appName = remember(pkg) {
-                                try {
-                                    val pm = context.packageManager
-                                    val appInfo = pm.getApplicationInfo(pkg, 0)
-                                    pm.getApplicationLabel(appInfo).toString()
-                                } catch (_: Exception) {
-                                    pkg.substringAfterLast(".")
-                                }
-                            }
-                            Surface(
-                                shape = RoundedCornerShape(16.dp),
-                                color = MaterialTheme.colorScheme.surfaceContainer,
-                                border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.08f)),
-                                modifier = Modifier.padding(vertical = 2.dp)
-                            ) {
-                                Row(
-                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    AppIcon(packageName = pkg, size = 28.dp)
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Text(
-                                        text = appName,
-                                        style = MaterialTheme.typography.bodyMedium.copy(
-                                            fontWeight = FontWeight.Medium
-                                        )
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        // Mindfulness Principle Card
-        item {
-            Surface(
-                shape = RoundedCornerShape(20.dp),
-                color = MaterialTheme.colorScheme.surfaceContainer,
-                border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.06f)),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Row(
-                    modifier = Modifier.padding(18.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = "🌱",
-                        fontSize = 28.sp,
-                        modifier = Modifier.padding(end = 14.dp)
-                    )
-                    Column {
-                        Text(
-                            text = "Friction Creates Freedom",
-                            style = MaterialTheme.typography.titleLarge.copy(
-                                fontSize = 15.sp,
-                                fontWeight = FontWeight.SemiBold
-                            )
-                        )
-                        Spacer(modifier = Modifier.height(2.dp))
-                        Text(
-                            text = "Opening an app isn't a failure. HoldUp gives your conscious mind a moment to decide if this is what you truly desire right now.",
-                            style = MaterialTheme.typography.bodyMedium.copy(
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                lineHeight = 19.sp
-                            )
-                        )
-                    }
-                }
-            }
-        }
-        item { Spacer(modifier = Modifier.height(16.dp)) }
-    }
 }
 
 @Composable
@@ -1565,7 +879,7 @@ fun InterventionsTab(
             )
         }
 
-        // 1. Rotation Strategy Card
+        // 1. Studio Pause Play Order Card
         item {
             Surface(
                 shape = RoundedCornerShape(20.dp),
@@ -1592,13 +906,13 @@ fun InterventionsTab(
                         Spacer(modifier = Modifier.width(12.dp))
                         Column {
                             Text(
-                                text = "Rotation Strategy",
+                                text = "Pause Play Order",
                                 style = MaterialTheme.typography.titleMedium.copy(
                                     fontWeight = FontWeight.SemiBold
                                 )
                             )
                             Text(
-                                text = "How active pauses cycle when opening target apps",
+                                text = "How HoldUp cycles through your active pauses below",
                                 style = MaterialTheme.typography.bodySmall.copy(
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
@@ -1613,9 +927,9 @@ fun InterventionsTab(
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         val modes = listOf(
-                            Triple(RuleMode.ROTATE, "🔄 Rotate", "In turn"),
-                            Triple(RuleMode.SHUFFLE, "🎲 Deck", "All first"),
-                            Triple(RuleMode.RANDOM, "✨ Random", "Pure chance")
+                            Triple(RuleMode.SHUFFLE, "🎲 Smart Shuffle", "No repeats"),
+                            Triple(RuleMode.ROTATE, "🔁 In Sequence", "In turn"),
+                            Triple(RuleMode.RANDOM, "✨ Pure Random", "Random")
                         )
 
                         modes.forEach { (mode, label, sub) ->
@@ -1642,8 +956,9 @@ fun InterventionsTab(
                                     Text(
                                         text = label,
                                         fontWeight = FontWeight.Bold,
-                                        fontSize = 13.sp,
-                                        color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                                        fontSize = 12.sp,
+                                        color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+                                        maxLines = 1
                                     )
                                     Spacer(modifier = Modifier.height(2.dp))
                                     Text(
@@ -1651,12 +966,22 @@ fun InterventionsTab(
                                         style = MaterialTheme.typography.labelSmall.copy(
                                             fontSize = 10.sp,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
+                                        ),
+                                        maxLines = 1
                                     )
                                 }
                             }
                         }
                     }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Text(
+                        text = "Apps set to 'Studio Playlist' will cycle through your enabled pauses using this order.",
+                        style = MaterialTheme.typography.bodySmall.copy(
+                            fontSize = 11.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f)
+                        )
+                    )
                 }
             }
         }
