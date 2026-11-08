@@ -286,7 +286,7 @@ fun SettingsTab(
 
                     Spacer(modifier = Modifier.height(12.dp))
                     Text(
-                        text = "When re-opening a shielded app within 15 minutes, pauses progressively increase (10s on 2nd open, 20s on 3rd+) and proceeding costs 5 mindful points. Walking away always awards full points.",
+                        text = "When re-opening a shielded app within 15 minutes, pauses progressively increase (10s on 2nd open, 20s on 3rd+) and proceeding costs 5 mindful points. Walking away protects your Clean Focus streak.",
                         style = MaterialTheme.typography.bodySmall.copy(
                             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.85f),
                             lineHeight = 18.sp

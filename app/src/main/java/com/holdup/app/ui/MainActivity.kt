@@ -627,10 +627,45 @@ fun AppsTab(
                 it.packageName.contains(searchQuery, ignoreCase = true)
             }
 
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
+            if (filtered.isEmpty()) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 48.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Surface(
+                            shape = CircleShape,
+                            color = MaterialTheme.colorScheme.surfaceContainerHighest,
+                            modifier = Modifier.size(56.dp)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    imageVector = Icons.Default.SearchOff,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.size(28.dp)
+                                )
+                            }
+                        }
+                        Spacer(modifier = Modifier.height(14.dp))
+                        Text(
+                            text = "No apps found",
+                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold)
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = "No apps matching \"$searchQuery\"",
+                            style = MaterialTheme.typography.bodySmall.copy(color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        )
+                    }
+                }
+            } else {
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
                 items(filtered, key = { it.packageName }) { appItem ->
                     val isChecked = monitoredPackages.contains(appItem.packageName)
                     val rule = perAppRules[appItem.packageName]
@@ -692,6 +727,13 @@ fun AppsTab(
                                 )
                             }
 
+                            Icon(
+                                imageVector = Icons.Default.ChevronRight,
+                                contentDescription = "Configure rules",
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
+                                modifier = Modifier.size(18.dp).padding(end = 4.dp)
+                            )
+
                             Switch(
                                 checked = isChecked,
                                 onCheckedChange = {
@@ -709,6 +751,7 @@ fun AppsTab(
                     }
                 }
                 item { Spacer(modifier = Modifier.height(16.dp)) }
+                }
             }
         }
     }
@@ -1019,7 +1062,7 @@ fun InterventionsTab(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                // Card 1: Breathing
+                // Card 1: Mindful Breathing
                 val isBreathingEnabled = globalSettings.enabledInterventions.contains(InterventionType.BREATHING)
                 StudioGridCard(
                     title = "Breathing",
@@ -1048,36 +1091,11 @@ fun InterventionsTab(
                         modifier = Modifier.fillMaxSize(),
                         contentAlignment = Alignment.Center
                     ) {
-                        Box(
-                            modifier = Modifier
-                                .size(50.dp)
-                                .clip(CircleShape)
-                                .background(ZenSage.copy(alpha = 0.12f)),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(34.dp)
-                                    .clip(CircleShape)
-                                    .background(ZenSage.copy(alpha = 0.25f)),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(20.dp)
-                                        .clip(CircleShape)
-                                        .background(Brush.radialGradient(listOf(ZenSage, ZenSageDim))),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Air,
-                                        contentDescription = null,
-                                        tint = Color(0xFF090A0D),
-                                        modifier = Modifier.size(11.dp)
-                                    )
-                                }
-                            }
-                        }
+                        MiniBreathingBloom(
+                            modifier = Modifier.size(54.dp),
+                            color = ZenSage,
+                            secondaryColor = ZenSageDim
+                        )
                     }
                 }
 

@@ -1,6 +1,8 @@
 package com.holdup.app.ui.components
 
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -17,9 +19,11 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
@@ -32,6 +36,87 @@ import coil3.compose.AsyncImage
 import com.holdup.app.data.model.AlternativeActivity
 import com.holdup.app.ui.theme.*
 import java.io.File
+import kotlin.math.PI
+import kotlin.math.cos
+
+@Composable
+fun MiniBreathingBloom(
+    modifier: Modifier = Modifier,
+    color: Color = ZenSage,
+    secondaryColor: Color = ZenSageDim
+) {
+    val infiniteTransition = rememberInfiniteTransition(label = "MiniBloomInfinite")
+    val breathProgress by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(4200, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "MiniBreathProgress"
+    )
+
+    // Inhale (0..0.45), Hold (0.45..0.55), Exhale (0.55..1.0)
+    val scale = when {
+        breathProgress < 0.45f -> {
+            val u = breathProgress / 0.45f
+            0.64f + 0.36f * ((1.0 - cos(u * PI)) / 2.0).toFloat()
+        }
+        breathProgress < 0.55f -> 1.0f
+        else -> {
+            val v = (breathProgress - 0.55f) / 0.45f
+            1.0f - 0.36f * ((1.0 - cos(v * PI)) / 2.0).toFloat()
+        }
+    }
+    val rotationDeg = breathProgress * 360f * 0.15f
+
+    Box(
+        modifier = modifier,
+        contentAlignment = Alignment.Center
+    ) {
+        Canvas(modifier = Modifier.fillMaxSize()) {
+            val center = Offset(size.width / 2f, size.height / 2f)
+            val baseRadius = (size.minDimension / 2f) * 0.68f
+
+            BreathingBloomRenderer.drawAmbientBloom(
+                scope = this,
+                center = center,
+                baseRadius = baseRadius,
+                scale = scale,
+                primary = color,
+                secondary = secondaryColor
+            )
+
+            val petalRadius = baseRadius * scale * 0.58f
+            val petalSpread = baseRadius * scale * 0.46f
+            BreathingBloomRenderer.drawLotusPetals(
+                scope = this,
+                center = center,
+                petalRadius = petalRadius,
+                petalSpread = petalSpread,
+                rotationDeg = rotationDeg,
+                primary = color,
+                secondary = secondaryColor,
+                petalCount = 6
+            )
+
+            BreathingBloomRenderer.drawCoreAuraAndOrb(
+                scope = this,
+                center = center,
+                coreRadius = baseRadius * scale * 0.42f,
+                primary = color,
+                secondary = secondaryColor
+            )
+        }
+
+        Icon(
+            imageVector = Icons.Default.Air,
+            contentDescription = null,
+            tint = Color(0xFF090A0D),
+            modifier = Modifier.size(13.dp)
+        )
+    }
+}
 
 @Composable
 fun BreathingPreviewBanner(modifier: Modifier = Modifier) {
@@ -47,39 +132,13 @@ fun BreathingPreviewBanner(modifier: Modifier = Modifier) {
             modifier = Modifier.fillMaxSize(),
             contentAlignment = Alignment.Center
         ) {
-            // Concentric glowing rings
-            Box(
-                modifier = Modifier
-                    .size(70.dp)
-                    .clip(CircleShape)
-                    .background(ZenSage.copy(alpha = 0.08f)),
-                contentAlignment = Alignment.Center
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(50.dp)
-                        .clip(CircleShape)
-                        .background(ZenSage.copy(alpha = 0.16f)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(32.dp)
-                            .clip(CircleShape)
-                            .background(Brush.radialGradient(listOf(ZenSage, ZenSageDim))),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Air,
-                            contentDescription = null,
-                            tint = Color(0xFF090A0D),
-                            modifier = Modifier.size(16.dp)
-                        )
-                    }
-                }
-            }
+            MiniBreathingBloom(
+                modifier = Modifier.size(64.dp),
+                color = ZenSage,
+                secondaryColor = ZenSageDim
+            )
 
-            // Inhale / Exhale cues
+            // Inhale / Hold / Exhale cues
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -90,14 +149,14 @@ fun BreathingPreviewBanner(modifier: Modifier = Modifier) {
                 Text(
                     text = "• Inhale",
                     style = MaterialTheme.typography.labelSmall.copy(
-                        color = ZenSage.copy(alpha = 0.7f),
+                        color = ZenSage.copy(alpha = 0.75f),
                         fontWeight = FontWeight.Medium
                     )
                 )
                 Text(
-                    text = "Exhale •",
+                    text = "Hold • Exhale",
                     style = MaterialTheme.typography.labelSmall.copy(
-                        color = ZenSage.copy(alpha = 0.7f),
+                        color = ZenSage.copy(alpha = 0.75f),
                         fontWeight = FontWeight.Medium
                     )
                 )

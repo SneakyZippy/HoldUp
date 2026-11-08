@@ -13,6 +13,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.compose.animation.*
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -108,10 +109,9 @@ class InterventionActivity : ComponentActivity() {
                             HoldUpAccessibilityService.suppressInterception(targetPackage, 1500L)
                         }
                         if (isTestMode) {
-                            val pts = if (isAlternative) 20 else 10
                             Toast.makeText(
                                 this@InterventionActivity,
-                                "Test complete: Walk Away (+$pts mindful pts)",
+                                "Test complete: Walk Away",
                                 Toast.LENGTH_SHORT
                             ).show()
                             finishAndRemoveTask()
@@ -225,7 +225,15 @@ fun InterventionScreen(
     var currentQuote by remember { mutableStateOf("") }
     var availableQuotes by remember { mutableStateOf<List<String>>(defaultReflections) }
 
-    // Countdown effect for Relapse Friction delay
+    val scrollState = rememberScrollState()
+
+    LaunchedEffect(isInterventionCompleted) {
+        if (isInterventionCompleted) {
+            scrollState.animateScrollTo(scrollState.maxValue)
+        }
+    }
+
+    // Countdown effect for Relapse Friction delay banner
     LaunchedEffect(relapseRemainingSeconds) {
         if (relapseRemainingSeconds > 0) {
             kotlinx.coroutines.delay(1000L)
@@ -324,6 +332,8 @@ fun InterventionScreen(
         }
     }
 
+    val isBreathingActive = activeInterventionType == InterventionType.BREATHING && !isSoftNudge
+
     BoxWithConstraints(
         modifier = Modifier
             .fillMaxSize()
@@ -331,12 +341,39 @@ fun InterventionScreen(
             .statusBarsPadding()
             .navigationBarsPadding()
     ) {
+        if (isBreathingActive) {
+            val infiniteTransition = rememberInfiniteTransition(label = "AtmospherePulse")
+            val atmosphereAlpha by infiniteTransition.animateFloat(
+                initialValue = 0.08f,
+                targetValue = 0.22f,
+                animationSpec = infiniteRepeatable(
+                    animation = tween(4000, easing = FastOutSlowInEasing),
+                    repeatMode = RepeatMode.Reverse
+                ),
+                label = "AtmosphereAlpha"
+            )
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(
+                        androidx.compose.ui.graphics.Brush.radialGradient(
+                            colors = listOf(
+                                MaterialTheme.colorScheme.primary.copy(alpha = atmosphereAlpha),
+                                MaterialTheme.colorScheme.secondary.copy(alpha = atmosphereAlpha * 0.4f),
+                                Color.Transparent
+                            ),
+                            radius = 1200f
+                        )
+                    )
+            )
+        }
+
         val minHeight = maxHeight
         Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .heightIn(min = minHeight)
-                .verticalScroll(rememberScrollState())
+                .verticalScroll(scrollState)
                 .padding(vertical = 20.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.SpaceBetween
@@ -410,14 +447,16 @@ fun InterventionScreen(
                     if (isSoftNudge) {
                         SoftNudgeBody()
                     } else {
+                        val effectiveFrictionSeconds = remember(breathingSeconds, relapseState.delaySeconds) {
+                            maxOf(breathingSeconds, relapseState.delaySeconds)
+                        }
+
                         when (activeInterventionType) {
                             InterventionType.BREATHING -> {
                                 BreathingOrb(
-                                    totalSeconds = maxOf(breathingSeconds, relapseRemainingSeconds),
+                                    totalSeconds = effectiveFrictionSeconds,
                                     onCompleted = {
-                                        if (relapseRemainingSeconds <= 0) {
-                                            isInterventionCompleted = true
-                                        }
+                                        isInterventionCompleted = true
                                     }
                                 )
                             }
@@ -478,18 +517,52 @@ fun InterventionScreen(
             // Footer: Decision Controls
             AnimatedVisibility(
                 visible = isInterventionCompleted,
-                enter = fadeIn(),
-                exit = fadeOut()
+                enter = fadeIn(tween(400)) + slideInVertically(initialOffsetY = { 30 }),
+                exit = fadeOut(tween(200))
             ) {
-                DecisionFooter(
-                    isSoftNudge = isSoftNudge,
-                    targetPackageName = targetPackageName,
-                    maxSessionMinutes = maxSessionMinutes,
-                    relapseState = relapseState,
-                    selectedAlternative = selectedAlternative,
-                    onWalkAway = { onWalkAway(selectedAlternative != null) },
-                    onOpenSession = onOpenSession
-                )
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    if (activeInterventionType == InterventionType.BREATHING && !isSoftNudge) {
+                        Surface(
+                            shape = RoundedCornerShape(20.dp),
+                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.35f)),
+                            modifier = Modifier.padding(bottom = 12.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Check,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(15.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = "Mindful Pause Complete",
+                                    style = MaterialTheme.typography.labelSmall.copy(
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.primary,
+                                        letterSpacing = 0.3.sp
+                                    )
+                                )
+                            }
+                        }
+                    }
+                    DecisionFooter(
+                        isSoftNudge = isSoftNudge,
+                        targetPackageName = targetPackageName,
+                        maxSessionMinutes = maxSessionMinutes,
+                        relapseState = relapseState,
+                        selectedAlternative = selectedAlternative,
+                        onWalkAway = { onWalkAway(selectedAlternative != null) },
+                        onOpenSession = onOpenSession
+                    )
+                }
             }
         }
     }
@@ -666,9 +739,9 @@ fun DecisionFooter(
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
                                 text = if (selectedAlternative != null) {
-                                    "${selectedAlternative.title} (+20 pts)"
+                                    selectedAlternative.title
                                 } else {
-                                    "Walk Away (+10 pts)"
+                                    "Walk Away"
                                 },
                                 style = MaterialTheme.typography.titleMedium.copy(
                                     fontWeight = FontWeight.Bold,

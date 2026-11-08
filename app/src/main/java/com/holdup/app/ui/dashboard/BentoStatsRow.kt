@@ -203,17 +203,18 @@ private fun MindfulPointsTile(
 
             Column(modifier = Modifier.padding(vertical = 8.dp)) {
                 Text(
-                    text = "Tier ${todayStats.currentLevelNumber}",
+                    text = "${todayStats.userLevel} • Tier ${todayStats.currentLevelNumber}",
                     style = MaterialTheme.typography.labelSmall.copy(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         fontWeight = FontWeight.Medium
-                    )
+                    ),
+                    maxLines = 1
                 )
                 Text(
-                    text = todayStats.userLevel,
+                    text = "${todayStats.lifetimePoints} pts",
                     style = MaterialTheme.typography.titleMedium.copy(
                         fontWeight = FontWeight.Bold,
-                        fontSize = 17.sp,
+                        fontSize = 19.sp,
                         color = MaterialTheme.colorScheme.onSurface
                     ),
                     maxLines = 1

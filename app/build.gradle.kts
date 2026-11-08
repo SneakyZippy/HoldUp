@@ -7,14 +7,14 @@ plugins {
 
 android {
     namespace   = "com.holdup.app"
-    compileSdk  = 36
+    compileSdk  = 35
 
     defaultConfig {
         applicationId = "com.sneakyzippy.holdup"
         minSdk        = 26
-        targetSdk     = 36
-        versionCode   = 5
-        versionName   = "1.0.1"
+        targetSdk     = 35
+        versionCode   = 6
+        versionName   = "1.1.0"
     }
 
     buildTypes {

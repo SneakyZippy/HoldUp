@@ -184,10 +184,18 @@ class PreferencesManager(private val context: Context) {
         val cleanHoursAwarded = if (isToday) prefs[KEY_CLEAN_HOURS_AWARDED_TODAY] ?: 0 else 0
         val isCleanBonusAwarded = if (isToday) prefs[KEY_CLEAN_DAY_BONUS_AWARDED] ?: false else false
 
-        val cleanMinutes = calculateCleanFocusMinutes(
-            lastInterruption = prefs[KEY_LAST_INTERRUPTION_TIMESTAMP] ?: 0L,
-            now = System.currentTimeMillis()
-        )
+        val isMonitoring = prefs[KEY_MONITORING_ENABLED] ?: true
+        val monitoredSet = prefs[KEY_MONITORED_PACKAGES] ?: DEFAULT_TARGET_PACKAGES
+        val isShieldActive = isMonitoring && monitoredSet.isNotEmpty()
+
+        val cleanMinutes = if (isShieldActive) {
+            calculateCleanFocusMinutes(
+                lastInterruption = prefs[KEY_LAST_INTERRUPTION_TIMESTAMP] ?: 0L,
+                now = System.currentTimeMillis()
+            )
+        } else {
+            0
+        }
 
         DailyStats(
             dateString = today,
@@ -214,6 +222,9 @@ class PreferencesManager(private val context: Context) {
     suspend fun setMonitoringEnabled(enabled: Boolean) {
         context.dataStore.edit { prefs ->
             prefs[KEY_MONITORING_ENABLED] = enabled
+            if (enabled) {
+                prefs[KEY_LAST_INTERRUPTION_TIMESTAMP] = System.currentTimeMillis()
+            }
         }
     }
 
@@ -316,6 +327,12 @@ class PreferencesManager(private val context: Context) {
         var newPointsToAdd = 0
 
         context.dataStore.edit { prefs ->
+            val isMonitoring = prefs[KEY_MONITORING_ENABLED] ?: true
+            val monitoredSet = prefs[KEY_MONITORED_PACKAGES] ?: DEFAULT_TARGET_PACKAGES
+            val isShieldActive = isMonitoring && monitoredSet.isNotEmpty()
+            if (!isShieldActive) {
+                return@edit
+            }
             val savedDate = prefs[KEY_TODAY_DATE] ?: ""
             if (savedDate != today) {
                 if (savedDate.isNotBlank()) {
@@ -396,8 +413,6 @@ class PreferencesManager(private val context: Context) {
                 prefs[KEY_TOTAL_INTERCEPTIONS] = current + 1
             }
 
-            // Update interruption timestamp for Clean Focus
-            prefs[KEY_LAST_INTERRUPTION_TIMESTAMP] = now
 
             // Update app intervention history for Relapse Resistance
             if (packageName.isNotBlank()) {
@@ -419,19 +434,13 @@ class PreferencesManager(private val context: Context) {
 
     suspend fun recordWalkAway(minutesSavedEstimate: Int = 15, isAlternativeActivity: Boolean = false) {
         val today = getTodayDateString()
-        val pointsToAdd = if (isAlternativeActivity) 20 else 10
         context.dataStore.edit { prefs ->
             val savedDate = prefs[KEY_TODAY_DATE] ?: ""
-            val lifetime = prefs[KEY_LIFETIME_POINTS] ?: 0
-            prefs[KEY_LIFETIME_POINTS] = lifetime + pointsToAdd
-
             if (savedDate == today) {
                 val walked = prefs[KEY_WALKED_AWAY] ?: 0
                 val saved = prefs[KEY_MINUTES_SAVED] ?: 0
-                val pointsToday = prefs[KEY_POINTS_TODAY] ?: 0
                 prefs[KEY_WALKED_AWAY] = walked + 1
                 prefs[KEY_MINUTES_SAVED] = saved + minutesSavedEstimate
-                prefs[KEY_POINTS_TODAY] = pointsToday + pointsToAdd
             } else {
                 if (savedDate.isNotBlank()) {
                     checkAndAwardPendingBonus(prefs)
@@ -441,7 +450,6 @@ class PreferencesManager(private val context: Context) {
                 prefs[KEY_WALKED_AWAY] = 1
                 prefs[KEY_PROCEEDED] = 0
                 prefs[KEY_MINUTES_SAVED] = minutesSavedEstimate
-                prefs[KEY_POINTS_TODAY] = pointsToAdd
             }
         }
     }

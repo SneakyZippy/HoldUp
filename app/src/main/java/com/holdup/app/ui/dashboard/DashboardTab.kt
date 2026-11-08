@@ -81,10 +81,8 @@ fun DashboardTab(
             BentoStatsRow(todayStats = todayStats)
         }
 
-        if (installedShieldedPackages.isNotEmpty()) {
-            item {
-                ActiveShieldsRow(shieldedPackages = installedShieldedPackages)
-            }
+        item {
+            ActiveShieldsRow(shieldedPackages = installedShieldedPackages)
         }
 
         item {

@@ -18,10 +18,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -30,6 +27,12 @@ import kotlin.math.PI
 import kotlin.math.ceil
 import kotlin.math.cos
 import kotlin.math.sin
+
+enum class BreathPhase(val title: String, val subtitle: String) {
+    INHALE("Breathe in", "Expand gently"),
+    HOLD("Hold", "Feel the stillness"),
+    EXHALE("Breathe out", "Release all tension")
+}
 
 @Composable
 fun BreathingOrb(
@@ -41,40 +44,37 @@ fun BreathingOrb(
     val primaryColor = MaterialTheme.colorScheme.primary
     val secondaryColor = MaterialTheme.colorScheme.secondary
 
-    fun triggerHapticPulse(durationMs: Long = 40) {
+    fun triggerHaptic(durationMs: Long = 35) {
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                val vibratorManager = context.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as? VibratorManager
-                vibratorManager?.defaultVibrator?.vibrate(
+                val vm = context.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as? VibratorManager
+                vm?.defaultVibrator?.vibrate(
                     VibrationEffect.createOneShot(durationMs, VibrationEffect.DEFAULT_AMPLITUDE)
                 )
             } else {
                 @Suppress("DEPRECATION")
-                val vibrator = context.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
+                val v = context.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                    vibrator?.vibrate(VibrationEffect.createOneShot(durationMs, VibrationEffect.DEFAULT_AMPLITUDE))
+                    v?.vibrate(VibrationEffect.createOneShot(durationMs, VibrationEffect.DEFAULT_AMPLITUDE))
                 } else {
                     @Suppress("DEPRECATION")
-                    vibrator?.vibrate(durationMs)
+                    v?.vibrate(durationMs)
                 }
             }
         } catch (_: Exception) {}
     }
 
-    // Determine breath cycle duration so that totalSeconds divides evenly into whole cycles
-    val cycleDurationSec = when (totalSeconds) {
-        5 -> 5f
-        8 -> 8f
-        12 -> 6f
-        16 -> 8f
-        else -> if (totalSeconds <= 6) totalSeconds.toFloat() else 8f
+    val cycleDurationSec = when {
+        totalSeconds <= 5 -> totalSeconds.toFloat()
+        totalSeconds % 8 == 0 -> 8f
+        totalSeconds % 6 == 0 -> 6f
+        else -> 8f
     }
 
-    // Master continuous progress from 0.0f to 1.0f over totalSeconds
     val animProgress = remember { Animatable(0f) }
 
     LaunchedEffect(totalSeconds) {
-        triggerHapticPulse(50)
+        triggerHaptic(45)
         animProgress.snapTo(0f)
         animProgress.animateTo(
             targetValue = 1f,
@@ -83,7 +83,7 @@ fun BreathingOrb(
                 easing = LinearEasing
             )
         )
-        triggerHapticPulse(60)
+        triggerHaptic(55)
         onCompleted()
     }
 
@@ -93,33 +93,45 @@ fun BreathingOrb(
     val cycleMs = cycleDurationSec * 1000f
     val cycleProgress = (elapsedMs % cycleMs) / cycleMs
 
-    // Inhale during first half (0.0 to 0.5), Exhale during second half (0.5 to 1.0)
-    val isInhale = cycleProgress < 0.5f
-    val phaseText = if (isInhale) "Breathe in" else "Breathe out"
-
-    // Haptic pulse when switching breath direction
-    var lastIsInhale by remember { mutableStateOf(isInhale) }
-    LaunchedEffect(isInhale) {
-        if (lastIsInhale != isInhale && progressValue > 0.05f && progressValue < 0.95f) {
-            triggerHapticPulse(40)
-        }
-        lastIsInhale = isInhale
+    // 3-Phase Breathwork: Inhale 42%, Hold 16%, Exhale 42%
+    val (phase, phaseProgress) = when {
+        cycleProgress < 0.42f -> BreathPhase.INHALE to (cycleProgress / 0.42f).coerceIn(0f, 1f)
+        cycleProgress < 0.58f -> BreathPhase.HOLD to ((cycleProgress - 0.42f) / 0.16f).coerceIn(0f, 1f)
+        else -> BreathPhase.EXHALE to ((cycleProgress - 0.58f) / 0.42f).coerceIn(0f, 1f)
     }
 
-    // Calculate silky sinusoidal scale (0.62f min to 1.0f max)
+    var lastPhase by remember { mutableStateOf(phase) }
+    LaunchedEffect(phase) {
+        if (lastPhase != phase && progressValue > 0.03f && progressValue < 0.97f) {
+            triggerHaptic(if (phase == BreathPhase.HOLD) 25 else 35)
+        }
+        lastPhase = phase
+    }
+
     val minScale = 0.62f
     val maxScale = 1.0f
-    val currentScale = if (isInhale) {
-        val u = (cycleProgress / 0.5f).coerceIn(0f, 1f)
-        val eased = ((1.0 - cos(u * PI)) / 2.0).toFloat()
-        minScale + (maxScale - minScale) * eased
-    } else {
-        val v = ((cycleProgress - 0.5f) / 0.5f).coerceIn(0f, 1f)
-        val eased = ((1.0 - cos(v * PI)) / 2.0).toFloat()
-        maxScale - (maxScale - minScale) * eased
+    val currentScale = when (phase) {
+        BreathPhase.INHALE -> {
+            val eased = ((1.0 - cos(phaseProgress * PI)) / 2.0).toFloat()
+            minScale + (maxScale - minScale) * eased
+        }
+        BreathPhase.HOLD -> {
+            // Subtle serene micro-breath pulse
+            val shimmer = sin(phaseProgress * PI * 2).toFloat() * 0.015f
+            maxScale + shimmer
+        }
+        BreathPhase.EXHALE -> {
+            val eased = ((1.0 - cos(phaseProgress * PI)) / 2.0).toFloat()
+            maxScale - (maxScale - minScale) * eased
+        }
     }
 
-    // Smooth continuous spinner arc
+    val rotationDeg = when (phase) {
+        BreathPhase.INHALE -> phaseProgress * 24f
+        BreathPhase.HOLD -> 24f + phaseProgress * 4f
+        BreathPhase.EXHALE -> 28f - phaseProgress * 28f
+    }
+
     val sweepAngle = progressValue * 360f
     val remainingSeconds = ceil((1f - progressValue) * totalSeconds).toInt().coerceAtLeast(0)
 
@@ -129,108 +141,77 @@ fun BreathingOrb(
         verticalArrangement = Arrangement.Center
     ) {
         Box(
-            modifier = Modifier.size(280.dp),
+            modifier = Modifier.size(270.dp),
             contentAlignment = Alignment.Center
         ) {
             Canvas(modifier = Modifier.fillMaxSize()) {
                 val center = Offset(size.width / 2f, size.height / 2f)
-                val baseRadius = (size.minDimension / 2f) * 0.68f
-                val ringRadius = baseRadius * 1.25f
+                val baseRadius = (size.minDimension / 2f) * 0.65f
+                val ringRadius = baseRadius * 1.30f
 
-                // 1. Ambient outer bloom pulsating with breath
-                drawCircle(
-                    brush = Brush.radialGradient(
-                        colors = listOf(
-                            primaryColor.copy(alpha = 0.22f * currentScale),
-                            secondaryColor.copy(alpha = 0.08f * currentScale),
-                            Color.Transparent
-                        ),
-                        center = center,
-                        radius = baseRadius * currentScale * 1.45f
-                    ),
-                    radius = baseRadius * currentScale * 1.45f,
-                    center = center
-                )
-
-                // 2. Delicate track ring (background of spinner)
-                drawCircle(
-                    color = Color.White.copy(alpha = 0.08f),
-                    radius = ringRadius,
+                // 1. Ambient outer glow bloom
+                BreathingBloomRenderer.drawAmbientBloom(
+                    scope = this,
                     center = center,
-                    style = Stroke(width = 3.5.dp.toPx())
+                    baseRadius = baseRadius,
+                    scale = currentScale,
+                    primary = primaryColor,
+                    secondary = secondaryColor
                 )
 
-                // 3. Smooth active spinner arc
-                if (sweepAngle > 0.5f) {
-                    drawArc(
-                        color = primaryColor,
-                        startAngle = -90f,
-                        sweepAngle = sweepAngle,
-                        useCenter = false,
-                        style = Stroke(width = 3.5.dp.toPx(), cap = StrokeCap.Round)
-                    )
-
-                    // Luminous indicator head on the progress arc
-                    val headAngleRad = Math.toRadians((-90.0 + sweepAngle))
-                    val headX = center.x + ringRadius * cos(headAngleRad).toFloat()
-                    val headY = center.y + ringRadius * sin(headAngleRad).toFloat()
-
-                    drawCircle(
-                        color = primaryColor.copy(alpha = 0.45f),
-                        radius = 6.dp.toPx(),
-                        center = Offset(headX, headY)
-                    )
-                    drawCircle(
-                        color = Color.White,
-                        radius = 3.dp.toPx(),
-                        center = Offset(headX, headY)
-                    )
-                }
-
-                // 4. Subtle secondary aura ripple
-                drawCircle(
-                    brush = Brush.radialGradient(
-                        colors = listOf(
-                            primaryColor.copy(alpha = 0.30f * currentScale),
-                            secondaryColor.copy(alpha = 0.12f * currentScale),
-                            Color.Transparent
-                        ),
-                        center = center,
-                        radius = baseRadius * currentScale * 1.10f
-                    ),
-                    radius = baseRadius * currentScale * 1.10f,
-                    center = center
+                // 2. Floating stardust particles
+                BreathingBloomRenderer.drawFloatingParticles(
+                    scope = this,
+                    center = center,
+                    maxRadius = ringRadius * 0.95f,
+                    rotationRad = Math.toRadians(rotationDeg.toDouble()).toFloat(),
+                    scale = currentScale,
+                    primary = primaryColor
                 )
 
-                // 5. Core luminous breathing orb
-                val orbRadius = baseRadius * currentScale
-                drawCircle(
-                    brush = Brush.radialGradient(
-                        colors = listOf(
-                            primaryColor.copy(alpha = 0.85f),
-                            secondaryColor.copy(alpha = 0.60f),
-                            primaryColor.copy(alpha = 0.40f)
-                        ),
-                        center = center,
-                        radius = orbRadius
-                    ),
-                    radius = orbRadius,
-                    center = center
+                // 3. Sacred Lotus organic petals (layer 1: outer counter-rotating)
+                val petalRadius = baseRadius * currentScale * 0.64f
+                val petalSpread = baseRadius * currentScale * 0.52f
+                BreathingBloomRenderer.drawLotusPetals(
+                    scope = this,
+                    center = center,
+                    petalRadius = petalRadius,
+                    petalSpread = petalSpread,
+                    rotationDeg = -rotationDeg * 0.6f,
+                    primary = secondaryColor,
+                    secondary = primaryColor,
+                    petalCount = 6
                 )
 
-                // 6. Gentle 3D spherical specular highlight
-                drawCircle(
-                    brush = Brush.radialGradient(
-                        colors = listOf(
-                            Color.White.copy(alpha = 0.30f),
-                            Color.White.copy(alpha = 0.05f),
-                            Color.Transparent
-                        ),
-                        center = Offset(center.x, center.y - orbRadius * 0.35f),
-                        radius = orbRadius * 0.70f
-                    ),
-                    radius = orbRadius * 0.70f,
-                    center = Offset(center.x, center.y - orbRadius * 0.35f)
+                // 4. Sacred Lotus organic petals (layer 2: forward rotating)
+                BreathingBloomRenderer.drawLotusPetals(
+                    scope = this,
+                    center = center,
+                    petalRadius = petalRadius * 0.90f,
+                    petalSpread = petalSpread * 0.78f,
+                    rotationDeg = rotationDeg,
+                    primary = primaryColor,
+                    secondary = secondaryColor,
+                    petalCount = 6
+                )
+
+                // 5. Central glowing core aura and specular highlight
+                val coreRadius = baseRadius * currentScale * 0.48f
+                BreathingBloomRenderer.drawCoreAuraAndOrb(
+                    scope = this,
+                    center = center,
+                    coreRadius = coreRadius,
+                    primary = primaryColor,
+                    secondary = secondaryColor
+                )
+
+                // 6. Perimeter progress halo with luminous head bead
+                BreathingBloomRenderer.drawProgressHalo(
+                    scope = this,
+                    center = center,
+                    ringRadius = ringRadius,
+                    sweepAngle = sweepAngle,
+                    primary = primaryColor
                 )
             }
 
@@ -240,35 +221,48 @@ fun BreathingOrb(
                 verticalArrangement = Arrangement.Center
             ) {
                 AnimatedContent(
-                    targetState = phaseText,
+                    targetState = phase,
                     transitionSpec = {
                         fadeIn(tween(350)) togetherWith fadeOut(tween(350))
                     },
                     label = "PhaseTransition"
-                ) { text ->
-                    Text(
-                        text = text,
-                        style = MaterialTheme.typography.titleLarge.copy(
-                            fontWeight = FontWeight.SemiBold,
-                            fontSize = 22.sp,
-                            letterSpacing = (-0.3).sp,
-                            color = Color.White
+                ) { targetPhase ->
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(
+                            text = targetPhase.title,
+                            style = MaterialTheme.typography.titleLarge.copy(
+                                fontWeight = FontWeight.SemiBold,
+                                fontSize = 23.sp,
+                                letterSpacing = (-0.2).sp,
+                                color = Color.White
+                            )
                         )
-                    )
+                        Spacer(modifier = Modifier.height(3.dp))
+                        Text(
+                            text = targetPhase.subtitle,
+                            style = MaterialTheme.typography.labelSmall.copy(
+                                color = Color.White.copy(alpha = 0.75f),
+                                fontWeight = FontWeight.Normal,
+                                fontSize = 11.sp,
+                                letterSpacing = 0.4.sp
+                            )
+                        )
+                    }
                 }
 
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(10.dp))
 
                 Surface(
                     shape = CircleShape,
-                    color = Color.Black.copy(alpha = 0.35f),
-                    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.15f))
+                    color = Color.Black.copy(alpha = 0.38f),
+                    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.16f))
                 ) {
                     Text(
                         text = "${remainingSeconds}s",
                         style = MaterialTheme.typography.labelMedium.copy(
                             fontWeight = FontWeight.Bold,
-                            color = Color.White.copy(alpha = 0.95f)
+                            color = Color.White.copy(alpha = 0.95f),
+                            fontSize = 12.sp
                         ),
                         modifier = Modifier.padding(horizontal = 12.dp, vertical = 3.dp)
                     )
@@ -276,12 +270,12 @@ fun BreathingOrb(
             }
         }
 
-        Spacer(modifier = Modifier.height(28.dp))
+        Spacer(modifier = Modifier.height(24.dp))
 
         Text(
             text = "Follow the rhythm • Reset your intention",
             style = MaterialTheme.typography.bodyMedium.copy(
-                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.82f),
                 letterSpacing = 0.2.sp
             ),
             modifier = Modifier.padding(horizontal = 24.dp)

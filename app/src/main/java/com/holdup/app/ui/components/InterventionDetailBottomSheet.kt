@@ -184,7 +184,7 @@ fun InterventionDetailBottomSheet(
                     BreathingPreviewBanner()
                     Spacer(modifier = Modifier.height(12.dp))
                     Text(
-                        text = "Pulsating orb & rhythmic haptics to interrupt impulsive scrolling and restore focus.",
+                        text = "Guided 3-phase mindful breathwork (Inhale • Hold • Exhale) with blooming lotus visuals and tactile haptics to restore conscious focus.",
                         style = MaterialTheme.typography.bodySmall.copy(
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )

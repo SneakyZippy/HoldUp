@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Privacy Policy | HoldUp</title>
+  <link rel="icon" type="image/png" href="icon.png">
+  <meta name="theme-color" content="#090A0D">
+  <meta name="description" content="Privacy Policy for HoldUp (com.sneakyzippy.holdup) - 100% offline digital wellbeing app. Zero tracking, no data collection.">
+
+  <style>
+    :root {
+      --bg: #090A0D;
+      --surface: #121419;
+      --surface-elevated: #181B23;
+      --border: rgba(255, 255, 255, 0.08);
+      --border-strong: rgba(255, 255, 255, 0.16);
+      --primary: #4EE1A0;
+      --primary-dim: #36B37E;
+      --primary-container: rgba(78, 225, 160, 0.12);
+      --accent: #A594F9;
+      --accent-container: rgba(165, 148, 249, 0.12);
+      --text: #F7F9FC;
+      --text-muted: #9096A5;
+      --text-dim: #5E6573;
+      --card-radius: 20px;
+      --btn-radius: 14px;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    body {
+      background-color: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 32px 18px 48px;
+      line-height: 1.6;
+    }
+
+    .container {
+      width: 100%;
+      max-width: 680px;
+      margin: 0 auto;
+    }
+
+    /* Header */
+    .header {
+      text-align: center;
+      margin-bottom: 24px;
+    }
+
+    .app-icon {
+      width: 80px;
+      height: 80px;
+      border-radius: 20px;
+      margin-bottom: 14px;
+      box-shadow: 0 12px 30px rgba(0, 0, 0, 0.6), 0 0 0 1px var(--border-strong);
+      object-fit: cover;
+    }
+
+    .app-title {
+      font-size: 28px;
+      font-weight: 700;
+      letter-spacing: -0.5px;
+      color: var(--text);
+      margin-bottom: 6px;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 12px;
+      background: var(--primary-container);
+      color: var(--primary);
+      border: 1px solid rgba(78, 225, 160, 0.25);
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 0.3px;
+      margin-top: 6px;
+    }
+
+    /* Meta bar */
+    .meta-bar {
+      display: flex;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 12px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--btn-radius);
+      padding: 12px 16px;
+      margin-bottom: 24px;
+      font-size: 13px;
+      color: var(--text-muted);
+    }
+
+    .meta-bar strong {
+      color: var(--text);
+    }
+
+    /* Content Cards */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--card-radius);
+      padding: 24px;
+      margin-bottom: 20px;
+    }
+
+    .card h2 {
+      font-size: 18px;
+      font-weight: 700;
+      color: var(--text);
+      margin-bottom: 12px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .card h3 {
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--primary);
+      margin: 16px 0 6px;
+    }
+
+    .card p {
+      font-size: 14px;
+      color: var(--text-muted);
+      margin-bottom: 12px;
+    }
+
+    .card ul {
+      margin-left: 20px;
+      margin-bottom: 12px;
+      font-size: 14px;
+      color: var(--text-muted);
+    }
+
+    .card li {
+      margin-bottom: 6px;
+    }
+
+    /* Callout */
+    .callout {
+      background: var(--primary-container);
+      border: 1px solid rgba(78, 225, 160, 0.25);
+      border-radius: var(--btn-radius);
+      padding: 16px;
+      margin-bottom: 20px;
+    }
+
+    .callout p {
+      color: var(--text);
+      font-size: 14px;
+      margin: 0;
+    }
+
+    .callout strong {
+      color: var(--primary);
+    }
+
+    /* Table */
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 16px 0;
+      font-size: 13px;
+    }
+
+    th, td {
+      border: 1px solid var(--border);
+      padding: 10px 12px;
+      text-align: left;
+    }
+
+    th {
+      background: var(--surface-elevated);
+      color: var(--text);
+      font-weight: 600;
+    }
+
+    td {
+      color: var(--text-muted);
+      vertical-align: top;
+    }
+
+    td code {
+      background: rgba(255, 255, 255, 0.06);
+      padding: 2px 6px;
+      border-radius: 4px;
+      color: var(--accent);
+      font-size: 12px;
+    }
+
+    a {
+      color: var(--primary);
+      text-decoration: none;
+    }
+
+    a:hover {
+      text-decoration: underline;
+    }
+
+    .back-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 13px;
+      color: var(--text-muted);
+      margin-bottom: 16px;
+    }
+
+    /* Footer */
+    .footer {
+      text-align: center;
+      margin-top: 16px;
+      font-size: 13px;
+      color: var(--text-dim);
+    }
+  </style>
+</head>
+<body>
+
+  <div class="container">
+    <a href="index.html" class="back-btn">&larr; Back to Testing Portal</a>
+
+    <header class="header">
+      <img src="icon.png" alt="HoldUp Icon" class="app-icon">
+      <h1 class="app-title">Privacy Policy</h1>
+      <div class="badge">100% Offline • Zero Tracking • Privacy First</div>
+    </header>
+
+    <div class="meta-bar">
+      <div><strong>Application:</strong> HoldUp (<code>com.sneakyzippy.holdup</code>)</div>
+      <div><strong>Last Updated:</strong> November 2026</div>
+      <div><strong>Developer:</strong> SneakyZippy</div>
+    </div>
+
+    <div class="callout">
+      <p>
+        <strong>Our Privacy Promise:</strong> HoldUp is an open-source, local-first Android application designed to help you break compulsive phone habits. <strong>HoldUp does not collect, store, transmit, or monetize any personal data.</strong> The app does not request Android internet permission and makes zero network calls.
+      </p>
+    </div>
+
+    <!-- Section 1 -->
+    <article class="card">
+      <h2>1. Information We Do Not Collect</h2>
+      <p>Because HoldUp operates strictly on your device without network capabilities, it is physically impossible for user data to leave your phone:</p>
+      <ul>
+        <li><strong>No Personal Identifiers:</strong> We do not ask for or collect your name, email, phone number, location, or device identifiers.</li>
+        <li><strong>No Telemetry or Analytics:</strong> The app contains zero analytics SDKs (no Firebase Analytics, Mixpanel, Adjust, or Sentry).</li>
+        <li><strong>No Advertisements:</strong> HoldUp is 100% ad-free and contains no advertising tracking libraries.</li>
+        <li><strong>No Account Required:</strong> All functionality is available immediately without any account registration or login.</li>
+      </ul>
+    </article>
+
+    <!-- Section 2 -->
+    <article class="card">
+      <h2>2. Device Permissions &amp; Usage</h2>
+      <p>HoldUp requires specific Android permissions to detect when shielded apps open and to present mindful pauses. Here is exactly how each permission is used:</p>
+
+      <table>
+        <thead>
+          <tr>
+            <th>Permission</th>
+            <th>Purpose</th>
+            <th>Data Handling</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>AccessibilityService</code></td>
+            <td>
+              Detects foreground app launches to trigger your chosen mindful pause before you start doomscrolling. Also performs the standard Home gesture when you choose "Walk Away".
+            </td>
+            <td>
+              <strong>Zero Logging.</strong> Only the active package name is compared against your local shielded list. HoldUp <strong>never</strong> reads, inspects, or logs keystrokes, passwords, chats, or screen contents (<code>canRetrieveWindowContent="false"</code>).
+            </td>
+          </tr>
+          <tr>
+            <td><code>PACKAGE_USAGE_STATS</code><br>(Usage Access)</td>
+            <td>
+              Displays today's accumulated screen time on the reality check banner to give you conscious context when opening an app.
+            </td>
+            <td>
+              Queried locally in real-time. Usage metrics are never transmitted or stored persistently.
+            </td>
+          </tr>
+          <tr>
+            <td><code>SYSTEM_ALERT_WINDOW</code></td>
+            <td>
+              Allows the mindful pause activity to appear cleanly over the launched app.
+            </td>
+            <td>
+              Visual overlay display only. No screen recording or background capture.
+            </td>
+          </tr>
+          <tr>
+            <td><code>POST_NOTIFICATIONS</code></td>
+            <td>
+              Delivers a gentle soft reminder notification when your intended mindful session timer (5, 10, or 15m) expires.
+            </td>
+            <td>
+              Scheduled and delivered locally on your device.
+            </td>
+          </tr>
+          <tr>
+            <td><code>VIBRATE</code></td>
+            <td>
+              Powers rhythmic tactile haptic feedback during guided breathing pauses.
+            </td>
+            <td>
+              Local hardware actuation only.
+            </td>
+          </tr>
+          <tr>
+            <td><code>FOREGROUND_SERVICE_SPECIAL_USE</code></td>
+            <td>
+              Maintains an active timer notification during an allowed session so you are gently notified when time runs out.
+            </td>
+            <td>
+              Local system notification lifecycle only.
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </article>
+
+    <!-- Section 3 -->
+    <article class="card">
+      <h2>3. AccessibilityService API Policy Compliance</h2>
+      <p>In accordance with Google Play's Accessibility policy:</p>
+      <ul>
+        <li>HoldUp uses Android's <code>AccessibilityService</code> API strictly for core habit-friction features: detecting foreground app launches and automating the "Home" navigation gesture upon walking away.</li>
+        <li>HoldUp provides a prominent in-app disclosure before requesting this permission.</li>
+        <li>HoldUp <strong>never</strong> uses accessibility access to record audio, capture user credentials, alter system settings without permission, or bypass security boundaries.</li>
+      </ul>
+    </article>
+
+    <!-- Section 4 -->
+    <article class="card">
+      <h2>4. Local Storage &amp; Data Retention</h2>
+      <p>All configuration data (such as your shielded apps, custom reflection quotes, mindful points, and chosen accent theme) is stored strictly in Android's private DataStore sandbox on your device.</p>
+      <p>Uninstalling HoldUp immediately and completely deletes all stored data.</p>
+    </article>
+
+    <!-- Section 5 -->
+    <article class="card">
+      <h2>5. Open Source &amp; Code Audits</h2>
+      <p>HoldUp is transparent and open source under the <strong>GNU General Public License v3.0 (GPLv3)</strong>. You can inspect the entire source code, build scripts, and verify our zero-tracking guarantees on GitHub:</p>
+      <p><a href="https://github.com/SneakyZippy/HoldUp" target="_blank" rel="noopener noreferrer">github.com/SneakyZippy/HoldUp</a></p>
+    </article>
+
+    <!-- Section 6 -->
+    <article class="card">
+      <h2>6. Contact &amp; Inquiries</h2>
+      <p>If you have any questions or feedback regarding this Privacy Policy, please contact the developer:</p>
+      <ul>
+        <li><strong>Developer:</strong> SneakyZippy</li>
+        <li><strong>Email:</strong> <a href="mailto:sneakyzippy.dev@gmail.com">sneakyzippy.dev@gmail.com</a></li>
+        <li><strong>Issue Tracker:</strong> <a href="https://github.com/SneakyZippy/HoldUp/issues" target="_blank" rel="noopener noreferrer">GitHub Issues</a></li>
+      </ul>
+    </article>
+
+    <footer class="footer">
+      <div>HoldUp • 100% Local, Open Source &amp; Ad-Free.</div>
+      <div style="margin-top: 6px;">
+        <a href="index.html">Closed Testing Guide</a> • <a href="https://github.com/SneakyZippy/HoldUp" target="_blank" rel="noopener noreferrer">GitHub Repository</a>
+      </div>
+    </footer>
+  </div>
+
+</body>
+</html>
