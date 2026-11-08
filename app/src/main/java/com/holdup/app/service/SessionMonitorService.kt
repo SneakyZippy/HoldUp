@@ -185,9 +185,10 @@ class SessionMonitorService : Service() {
         activePackageName = null
         isAppInForeground = false
 
-        // Clear active session in preferences so user is guarded next time
+        // Clear active session in preferences so user is guarded next time.
+        // Use applicationScope so that service teardown / stopSelf() does not cancel DataStore writes.
         if (targetPackage.isNotBlank()) {
-            serviceScope.launch {
+            HoldUpApp.instance.applicationScope.launch {
                 HoldUpApp.instance.preferencesManager.clearSession(targetPackage)
             }
         }

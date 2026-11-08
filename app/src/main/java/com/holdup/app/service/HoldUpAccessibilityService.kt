@@ -15,7 +15,8 @@ import kotlinx.coroutines.launch
 
 class HoldUpAccessibilityService : AccessibilityService() {
 
-    private val serviceScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
+    private val serviceJob = SupervisorJob()
+    private val serviceScope = CoroutineScope(Dispatchers.Main + serviceJob)
     private var lastInterceptedPackage: String? = null
     private var lastInterceptTime: Long = 0L
 
@@ -61,6 +62,7 @@ class HoldUpAccessibilityService : AccessibilityService() {
         if (instance == this) {
             instance = null
         }
+        serviceJob.cancel()
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
@@ -131,7 +133,7 @@ class HoldUpAccessibilityService : AccessibilityService() {
             lastInterceptedPackage = targetPackageName
             lastInterceptTime = now
             performGoHome()
-            serviceScope.launch {
+            HoldUpApp.instance.applicationScope.launch {
                 val prefs = HoldUpApp.instance.preferencesManager
                 prefs.syncCleanFocus()
                 prefs.recordInterception(targetPackageName)
@@ -153,7 +155,7 @@ class HoldUpAccessibilityService : AccessibilityService() {
         startActivity(intent)
 
         // Asynchronously update points and interception stats in the background
-        serviceScope.launch {
+        HoldUpApp.instance.applicationScope.launch {
             val prefs = HoldUpApp.instance.preferencesManager
             prefs.syncCleanFocus()
             prefs.recordInterception(targetPackageName)

@@ -257,8 +257,9 @@ class PreferencesManager(private val context: Context) {
 
         val now = System.currentTimeMillis()
         val fifteenMinutesAgo = now - (15 * 60 * 1000L)
-        val recentAttempts = historyMap[packageName]?.filter { it >= fifteenMinutesAgo } ?: emptyList()
-        val count = recentAttempts.size
+        // Exclude events recorded in the last 2 seconds to avoid counting the current interception as a prior attempt
+        val priorAttempts = historyMap[packageName]?.filter { it in fifteenMinutesAgo until (now - 2000L) } ?: emptyList()
+        val count = priorAttempts.size
 
         return when {
             count == 0 -> RelapseState(tier = 1, recentAttemptsCount = 1, delaySeconds = 0, penaltyPoints = 0)
@@ -280,6 +281,23 @@ class PreferencesManager(private val context: Context) {
         }
     }
 
+    private fun checkAndAwardPendingBonus(prefs: androidx.datastore.preferences.core.MutablePreferences) {
+        val prevCleanBonusAwarded = prefs[KEY_CLEAN_DAY_BONUS_AWARDED] ?: false
+        if (!prevCleanBonusAwarded) {
+            val prevTotal = prefs[KEY_TOTAL_INTERCEPTIONS] ?: 0
+            val prevProceeded = prefs[KEY_PROCEEDED] ?: 0
+            val bonus = when {
+                prevTotal == 0 -> 50
+                prevTotal in 1..2 && prevProceeded == 0 -> 25
+                else -> 0
+            }
+            if (bonus > 0) {
+                val lifetime = prefs[KEY_LIFETIME_POINTS] ?: 0
+                prefs[KEY_LIFETIME_POINTS] = lifetime + bonus
+            }
+        }
+    }
+
     suspend fun syncCleanFocus(): DailyStats {
         val today = getTodayDateString()
         val now = System.currentTimeMillis()
@@ -288,6 +306,9 @@ class PreferencesManager(private val context: Context) {
         context.dataStore.edit { prefs ->
             val savedDate = prefs[KEY_TODAY_DATE] ?: ""
             if (savedDate != today) {
+                if (savedDate.isNotBlank()) {
+                    checkAndAwardPendingBonus(prefs)
+                }
                 prefs[KEY_TODAY_DATE] = today
                 prefs[KEY_TOTAL_INTERCEPTIONS] = 0
                 prefs[KEY_WALKED_AWAY] = 0
@@ -347,6 +368,9 @@ class PreferencesManager(private val context: Context) {
         context.dataStore.edit { prefs ->
             val savedDate = prefs[KEY_TODAY_DATE] ?: ""
             if (savedDate != today) {
+                if (savedDate.isNotBlank()) {
+                    checkAndAwardPendingBonus(prefs)
+                }
                 prefs[KEY_TODAY_DATE] = today
                 prefs[KEY_TOTAL_INTERCEPTIONS] = 1
                 prefs[KEY_WALKED_AWAY] = 0
@@ -397,6 +421,9 @@ class PreferencesManager(private val context: Context) {
                 prefs[KEY_MINUTES_SAVED] = saved + minutesSavedEstimate
                 prefs[KEY_POINTS_TODAY] = pointsToday + pointsToAdd
             } else {
+                if (savedDate.isNotBlank()) {
+                    checkAndAwardPendingBonus(prefs)
+                }
                 prefs[KEY_TODAY_DATE] = today
                 prefs[KEY_TOTAL_INTERCEPTIONS] = 1
                 prefs[KEY_WALKED_AWAY] = 1
@@ -417,6 +444,9 @@ class PreferencesManager(private val context: Context) {
                 val proceeded = prefs[KEY_PROCEEDED] ?: 0
                 prefs[KEY_PROCEEDED] = proceeded + 1
             } else {
+                if (savedDate.isNotBlank()) {
+                    checkAndAwardPendingBonus(prefs)
+                }
                 prefs[KEY_TODAY_DATE] = today
                 prefs[KEY_TOTAL_INTERCEPTIONS] = 1
                 prefs[KEY_WALKED_AWAY] = 0

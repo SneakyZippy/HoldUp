@@ -105,18 +105,19 @@ class InterventionActivity : ComponentActivity() {
                             HoldUpAccessibilityService.suppressInterception(targetPackage, 1500L)
                         }
                         if (isTestMode) {
+                            val pts = if (isAlternative) 20 else 10
                             Toast.makeText(
                                 this@InterventionActivity,
-                                "Test complete: Walk Away (+15 mindful pts)",
+                                "Test complete: Walk Away (+$pts mindful pts)",
                                 Toast.LENGTH_SHORT
                             ).show()
                             finishAndRemoveTask()
                             return@InterventionScreen
                         }
-                        val scope = (application as HoldUpApp).preferencesManager
-                        // Log mindful win with points
-                        kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
-                            scope.recordWalkAway(15, isAlternativeActivity = isAlternative)
+                        val app = application as HoldUpApp
+                        // Log mindful win with points using applicationScope to prevent cancellation on task removal
+                        app.applicationScope.launch {
+                            app.preferencesManager.recordWalkAway(15, isAlternativeActivity = isAlternative)
                         }
                         // Navigate to home screen
                         val navigated = HoldUpAccessibilityService.performGoHome()
@@ -141,16 +142,17 @@ class InterventionActivity : ComponentActivity() {
                             finishAndRemoveTask()
                             return@InterventionScreen
                         }
-                        val scope = (application as HoldUpApp).preferencesManager
-                        kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+                        val app = application as HoldUpApp
+                        val appContext = applicationContext
+                        app.applicationScope.launch {
                             if (isPenalized) {
-                                scope.recordProceedPenalty(5)
+                                app.preferencesManager.recordProceedPenalty(5)
                                 kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
-                                    Toast.makeText(this@InterventionActivity, "⚠️ 5 mindful points deducted for relapse", Toast.LENGTH_SHORT).show()
+                                    Toast.makeText(appContext, "⚠️ 5 mindful points deducted for relapse", Toast.LENGTH_SHORT).show()
                                 }
                             }
-                            scope.recordProceedSession(targetPackage, minutes)
-                            scope.saveLastChosenDuration(targetPackage, minutes)
+                            app.preferencesManager.recordProceedSession(targetPackage, minutes)
+                            app.preferencesManager.saveLastChosenDuration(targetPackage, minutes)
                         }
                         SessionMonitorService.startSession(this@InterventionActivity, targetPackage, minutes)
 
