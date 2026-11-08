@@ -23,16 +23,18 @@ HoldUp intercepts doomscroll apps (Instagram, TikTok, YouTube, Reddit, etc.) wit
 
 When you open a monitored app, HoldUp pauses you with a mindful intervention:
 
+- **Sacred Lotus Breathwork**: Guided 3-phase breath cycle (Inhale, Hold, Exhale) with sacred geometry bloom and tactile haptics.
 - **Mindful Reflections**: Curated grounding prompts and reality checks (with hide/downvote and custom quotes).
-- **Breathing Exercise**: Rhythmic breath cycle with gentle haptics.
 - **Personal Anchor**: Photo of a loved one or video message from a friend.
 - **Healthy Swaps**: Quick ideas of rewarding things to do instead.
+- **Mindful Accent Themes**: 5 curated OLED atmospheres (Zen Sage, Mindful Iris, Glacier Blue, Golden Sunset, Sakura Rose).
 
 Choose to **Walk Away** (+10 pts) to log a mindful win and return home, choose a **Healthy Swap** (+20 pts) to redirect your energy, or open the app mindfully for a set session (**5, 10, or 15 min**). When your time expires, a soft nudge brings you back to reality.
 
-## Mindful Points & Clean Focus
+## Minimalist Bento Dashboard & Focus Tiers
 
-HoldUp rewards both conscious pause choices and pure offline focus:
+Track your journey without visual clutter:
+- **Mindful Intention Dial**: Instant visual feedback on today's conscious win rate and estimated minutes saved.
 - **Clean Focus Hours**: Earn **+10 points automatically** for every consecutive hour you don't touch any shielded app during daytime (08:00–22:00).
 - **Daily Focus Bonus**: Earn a **Pure Zen bonus (+50 pts)** for zero attempts all day, or a **Mindful Recovery bonus (+25 pts)** if you had 1–2 attempts and walked away.
 - **Walk Away**: **+10 points** for mindfully stepping back when an intervention triggers.
