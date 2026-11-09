@@ -115,12 +115,45 @@ For Android 14+ (API 34+), when using `specialUse`:
 
 ## 7. Google Play Console Release Workflow & Warning Guide
 
-### A. Ghost Permission Warnings
+### A. Target SDK & AGP Configuration
+* **Target SDK Mandate**: Always verify Google Play Console's current minimum target API level. For releases targeting API 36 (Android 16):
+  - In `app/build.gradle.kts`: `compileSdk = 36`, `targetSdk = 36`.
+  - In `gradle.properties`: Add `android.suppressUnsupportedCompileSdk=36` if using an AGP version that flags compileSdk 36.
+
+### B. Version Code Increment Rule (Never Reuse on Error)
+* If an uploaded `.aab` is rejected by Google Play Console (or fails during draft validation), **always increment `versionCode` by +1** before generating and uploading the fixed bundle.
+* Re-uploading the same `versionCode` frequently causes draft conflicts, duplicate version errors, or stale bundle caching in the Play Console.
+
+### C. Ghost Permission Warnings
 * If Play Console still warns about a permission after removing it from code, check the active bundles. Google flags permissions from any bundle that is **"Aktiv"** across any track (Internal, Closed, Production) or draft.
 * Deactivate the old bundle by creating a new release with an incremented `versionCode` and removing the old bundle from the draft.
 
-### B. Errors vs. Warnings
-* **Errors (Red)**: Block release submission. Must be resolved before publishing.
-* **Warnings (Yellow/Gray)**: Do **not** block release submission:
-  - *No deobfuscation/mapping file*: Informational; safe to ignore when `isMinifyEnabled = false`.
-  - *Native debug symbols*: Triggered by standard media/C++ libraries (e.g., ExoPlayer/Media3); safe to ignore.
+### D. Errors vs. Warnings (Triage)
+* **Errors (Red)**: Block release submission completely (e.g. Target SDK below minimum, invalid package name). Must be fixed in code/manifest.
+* **Warnings (Yellow/Gray)**: Do **not** block release submission or rollout:
+  - *No deobfuscation/mapping file ("Keine Offenlegungsdatei")*: Safe to ignore if `isMinifyEnabled = false` (stack traces are already in plain text).
+  - *No native debug symbols ("Native Symbole zum Debuggen")*: Safe to ignore if the app does not contain custom C++ code and native binaries originate from standard third-party libraries (e.g., Media3/ExoPlayer).
+
+---
+
+## 8. Privacy Policy Blueprint & GitHub Pages Hosting
+Every Google Play app requesting sensitive permissions (`AccessibilityService`, `UsageStats`, foreground services) must provide a valid, public Privacy Policy URL:
+1. **GitHub Pages Pattern**:
+   - Host `docs/privacy.html` in the app's git repository.
+   - Enable GitHub Pages in repository settings pointing to `/docs`.
+   - Resulting URL: `https://<username>.github.io/<repo>/privacy.html` (zero cost, 99.99% uptime, version controlled).
+2. **Mandatory Disclosures**:
+   - Explicitly name each sensitive permission used.
+   - State clearly why the permission is needed.
+   - Explicitly affirm that no user input, keystrokes, personal data, or screen content is stored, transmitted, or shared with third parties.
+   - Provide developer contact email.
+
+---
+
+## 9. Step-by-Step Signed Release Bundle Generation
+To generate the production `.aab` for Play Store upload:
+1. In Android Studio: **Build** ➔ **Generate Signed Bundle / APK...**
+2. Select **Android App Bundle (.aab)** ➔ Click **Next**.
+3. Select Key store path, enter Key store password, Key alias, and Key password ➔ Click **Next**.
+4. Select destination folder and choose Build Variant: **`release`** ➔ Click **Finish / Create**.
+5. Locate the generated `.aab` under `app/release/app-release.aab` and upload to Play Console.
