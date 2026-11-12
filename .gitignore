@@ -10,6 +10,10 @@
 local.properties
 *.apk
 *.aab
+*.jks
+*.keystore
+*.p12
+keystore.properties
 app/release/
 app/build/
 .kotlin/
