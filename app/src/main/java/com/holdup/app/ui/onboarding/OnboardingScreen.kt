@@ -2,9 +2,15 @@ package com.holdup.app.ui.onboarding
 
 import android.content.Context
 import android.content.Intent
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -46,6 +52,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.holdup.app.data.preferences.PreferencesManager
 import com.holdup.app.ui.components.AppIcon
+import com.holdup.app.ui.components.ZenAmbientBackground
+import com.holdup.app.ui.components.zenGlassBorder
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -80,17 +88,17 @@ fun OnboardingScreen(
     onToggleApp: (String, Boolean) -> Unit,
     isAccessibilityGranted: Boolean,
     isUsageAccessGranted: Boolean,
+    isNotificationsGranted: Boolean = true,
     onOpenAccessibilitySettings: () -> Unit,
     onOpenUsageSettings: () -> Unit,
+    onRequestNotificationPermission: () -> Unit = {},
     onCompleteOnboarding: () -> Unit
 ) {
     val haptic = LocalHapticFeedback.current
     var currentPage by remember { mutableIntStateOf(0) }
 
-    Box(
+    ZenAmbientBackground(
         modifier = Modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
             .statusBarsPadding()
             .navigationBarsPadding()
     ) {
@@ -110,11 +118,16 @@ fun OnboardingScreen(
             ) {
                 repeat(3) { index ->
                     val isSelected = currentPage == index
+                    val dotWidth by animateDpAsState(
+                        targetValue = if (isSelected) 32.dp else 6.dp,
+                        animationSpec = tween(250),
+                        label = "OnboardingDotWidth"
+                    )
                     Box(
                         modifier = Modifier
                             .padding(horizontal = 4.dp)
                             .height(6.dp)
-                            .width(if (isSelected) 32.dp else 6.dp)
+                            .width(dotWidth)
                             .clip(CircleShape)
                             .background(
                                 if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceContainerHighest
@@ -130,18 +143,36 @@ fun OnboardingScreen(
                     .fillMaxWidth(),
                 contentAlignment = Alignment.Center
             ) {
-                when (currentPage) {
-                    0 -> OnboardingWelcomeSlide()
-                    1 -> OnboardingShieldsSlide(
-                        monitoredPackages = monitoredPackages,
-                        onToggleApp = onToggleApp
-                    )
-                    2 -> OnboardingPermissionsSlide(
-                        isAccessibilityGranted = isAccessibilityGranted,
-                        isUsageAccessGranted = isUsageAccessGranted,
-                        onOpenAccessibilitySettings = onOpenAccessibilitySettings,
-                        onOpenUsageSettings = onOpenUsageSettings
-                    )
+                AnimatedContent(
+                    targetState = currentPage,
+                    transitionSpec = {
+                        if (targetState > initialState) {
+                            (slideInHorizontally { it / 3 } + fadeIn(tween(220))).togetherWith(
+                                slideOutHorizontally { -it / 3 } + fadeOut(tween(180))
+                            )
+                        } else {
+                            (slideInHorizontally { -it / 3 } + fadeIn(tween(220))).togetherWith(
+                                slideOutHorizontally { it / 3 } + fadeOut(tween(180))
+                            )
+                        }
+                    },
+                    label = "OnboardingSlideTransition"
+                ) { page ->
+                    when (page) {
+                        0 -> OnboardingWelcomeSlide()
+                        1 -> OnboardingShieldsSlide(
+                            monitoredPackages = monitoredPackages,
+                            onToggleApp = onToggleApp
+                        )
+                        2 -> OnboardingPermissionsSlide(
+                            isAccessibilityGranted = isAccessibilityGranted,
+                            isUsageAccessGranted = isUsageAccessGranted,
+                            isNotificationsGranted = isNotificationsGranted,
+                            onOpenAccessibilitySettings = onOpenAccessibilitySettings,
+                            onOpenUsageSettings = onOpenUsageSettings,
+                            onRequestNotificationPermission = onRequestNotificationPermission
+                        )
+                    }
                 }
             }
 
@@ -219,17 +250,35 @@ fun OnboardingWelcomeSlide() {
             .padding(horizontal = 20.dp)
     ) {
         Box(
-            modifier = Modifier
-                .size(130.dp)
-                .clip(CircleShape)
-                .shadow(6.dp, CircleShape),
+            modifier = Modifier.size(164.dp),
             contentAlignment = Alignment.Center
         ) {
-            Image(
-                painter = painterResource(id = com.holdup.app.R.drawable.ic_holdup_logo),
-                contentDescription = "HoldUp Logo",
-                modifier = Modifier.fillMaxSize()
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(
+                        Brush.radialGradient(
+                            colors = listOf(
+                                MaterialTheme.colorScheme.primary.copy(alpha = 0.24f),
+                                MaterialTheme.colorScheme.secondary.copy(alpha = 0.08f),
+                                androidx.compose.ui.graphics.Color.Transparent
+                            )
+                        )
+                    )
             )
+            Box(
+                modifier = Modifier
+                    .size(130.dp)
+                    .clip(CircleShape)
+                    .shadow(8.dp, CircleShape),
+                contentAlignment = Alignment.Center
+            ) {
+                Image(
+                    painter = painterResource(id = com.holdup.app.R.drawable.ic_holdup_logo),
+                    contentDescription = "HoldUp Logo",
+                    modifier = Modifier.fillMaxSize()
+                )
+            }
         }
 
         Spacer(modifier = Modifier.height(32.dp))
@@ -396,6 +445,23 @@ fun OnboardingShieldsSlide(
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         )
+        if (monitoredPackages.isNotEmpty()) {
+            Spacer(modifier = Modifier.height(8.dp))
+            Surface(
+                shape = RoundedCornerShape(12.dp),
+                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.14f),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.3f))
+            ) {
+                Text(
+                    text = "${monitoredPackages.size} selected",
+                    style = MaterialTheme.typography.labelSmall.copy(
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.primary
+                    ),
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                )
+            }
+        }
         Spacer(modifier = Modifier.height(14.dp))
 
         if (isLoading) {
@@ -780,8 +846,10 @@ private fun OnboardingAppCard(
 fun OnboardingPermissionsSlide(
     isAccessibilityGranted: Boolean,
     isUsageAccessGranted: Boolean,
+    isNotificationsGranted: Boolean = true,
     onOpenAccessibilitySettings: () -> Unit,
-    onOpenUsageSettings: () -> Unit
+    onOpenUsageSettings: () -> Unit,
+    onRequestNotificationPermission: () -> Unit = {}
 ) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -980,6 +1048,84 @@ fun OnboardingPermissionsSlide(
                             color = MaterialTheme.colorScheme.onSecondaryContainer,
                             fontWeight = FontWeight.Bold
                         )
+                    }
+                }
+            }
+        }
+
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+            Spacer(modifier = Modifier.height(14.dp))
+
+            // Session Timer Notifications Row
+            Surface(
+                shape = RoundedCornerShape(22.dp),
+                color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                border = BorderStroke(
+                    1.dp,
+                    if (isNotificationsGranted) MaterialTheme.colorScheme.primary.copy(alpha = 0.4f) else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.25f)
+                ),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
+                    modifier = Modifier.padding(18.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Session Timer Alerts",
+                            style = MaterialTheme.typography.titleMedium.copy(
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                        )
+                        Text(
+                            text = if (isNotificationsGranted) "Active & visible" else "Shows live countdown during sessions",
+                            style = MaterialTheme.typography.bodySmall.copy(
+                                color = if (isNotificationsGranted) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        )
+                    }
+
+                    if (isNotificationsGranted) {
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = MaterialTheme.colorScheme.primaryContainer
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Check,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = "Active",
+                                    style = MaterialTheme.typography.labelSmall.copy(
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                                    )
+                                )
+                            }
+                        }
+                    } else {
+                        FilledTonalButton(
+                            onClick = onRequestNotificationPermission,
+                            colors = ButtonDefaults.filledTonalButtonColors(
+                                containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                                contentColor = MaterialTheme.colorScheme.onSecondaryContainer
+                            ),
+                            shape = RoundedCornerShape(14.dp)
+                        ) {
+                            Text(
+                                text = "Allow",
+                                color = MaterialTheme.colorScheme.onSecondaryContainer,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
                     }
                 }
             }

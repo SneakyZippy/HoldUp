@@ -52,6 +52,14 @@ class PreferencesManager(private val context: Context) {
         private val KEY_CLEAN_HOURS_AWARDED_TODAY = intPreferencesKey("clean_hours_awarded_today")
         private val KEY_CLEAN_DAY_BONUS_AWARDED = booleanPreferencesKey("clean_day_bonus_awarded")
         private val KEY_ACCENT_COLOR_PRESET = stringPreferencesKey("accent_color_preset")
+        private val KEY_GRACE_USED_TODAY = intPreferencesKey("stats_grace_used_today")
+        private val KEY_OVER_BUDGET_OPENS_TODAY = intPreferencesKey("stats_over_budget_opens_today")
+        private val KEY_CURRENT_STREAK_DAYS = intPreferencesKey("stats_current_streak_days")
+        private val KEY_LONGEST_STREAK_DAYS = intPreferencesKey("stats_longest_streak_days")
+        private val KEY_STREAK_FREEZES_OWNED = intPreferencesKey("stats_streak_freezes_owned")
+
+        const val STREAK_FREEZE_COST = 100
+        const val MAX_STREAK_FREEZES = 2
 
         // Popular doomscroll apps pre-populated as defaults
         val DEFAULT_TARGET_PACKAGES = setOf(
@@ -143,31 +151,22 @@ class PreferencesManager(private val context: Context) {
         }
     }
 
+    /**
+     * 24/7 continuous Clean Focus minutes since the last over-budget interruption (or shield start).
+     */
     private fun calculateCleanFocusMinutes(lastInterruption: Long, now: Long): Int {
-        val calStart = Calendar.getInstance().apply {
-            timeInMillis = now
-            set(Calendar.HOUR_OF_DAY, 8)
-            set(Calendar.MINUTE, 0)
-            set(Calendar.SECOND, 0)
-            set(Calendar.MILLISECOND, 0)
+        if (lastInterruption <= 0L || now <= lastInterruption) return 0
+        val elapsedMinutes = ((now - lastInterruption) / 60000L).toInt()
+        return elapsedMinutes.coerceIn(0, 24 * 60)
+    }
+
+    private fun readDailyGraceBudget(prefs: Preferences): Int {
+        val raw = prefs[KEY_GLOBAL_SETTINGS] ?: return 15
+        return try {
+            json.decodeFromString<GlobalInterventionSettings>(raw).dailyGraceMinutes
+        } catch (_: Exception) {
+            15
         }
-        val calEnd = Calendar.getInstance().apply {
-            timeInMillis = now
-            set(Calendar.HOUR_OF_DAY, 22)
-            set(Calendar.MINUTE, 0)
-            set(Calendar.SECOND, 0)
-            set(Calendar.MILLISECOND, 0)
-        }
-        val startWindow = calStart.timeInMillis
-        val endWindow = calEnd.timeInMillis
-
-        if (now < startWindow) return 0
-
-        val streakStart = maxOf(startWindow, lastInterruption)
-        val effectiveEnd = minOf(now, endWindow)
-
-        val cleanMs = if (effectiveEnd > streakStart) effectiveEnd - streakStart else 0L
-        return (cleanMs / 60000L).toInt()
     }
 
     val todayStats: Flow<DailyStats> = context.dataStore.data.map { prefs ->
@@ -183,6 +182,12 @@ class PreferencesManager(private val context: Context) {
         val pointsToday = if (isToday) prefs[KEY_POINTS_TODAY] ?: 0 else 0
         val cleanHoursAwarded = if (isToday) prefs[KEY_CLEAN_HOURS_AWARDED_TODAY] ?: 0 else 0
         val isCleanBonusAwarded = if (isToday) prefs[KEY_CLEAN_DAY_BONUS_AWARDED] ?: false else false
+        val graceBudget = readDailyGraceBudget(prefs)
+        val graceUsedToday = if (isToday) prefs[KEY_GRACE_USED_TODAY] ?: 0 else 0
+        val overBudgetToday = if (isToday) prefs[KEY_OVER_BUDGET_OPENS_TODAY] ?: 0 else 0
+        val currentStreak = prefs[KEY_CURRENT_STREAK_DAYS] ?: 0
+        val longestStreak = prefs[KEY_LONGEST_STREAK_DAYS] ?: 0
+        val streakFreezes = prefs[KEY_STREAK_FREEZES_OWNED] ?: 0
 
         val isMonitoring = prefs[KEY_MONITORING_ENABLED] ?: true
         val monitoredSet = prefs[KEY_MONITORED_PACKAGES] ?: DEFAULT_TARGET_PACKAGES
@@ -207,7 +212,13 @@ class PreferencesManager(private val context: Context) {
             lifetimePoints = lifetime,
             cleanFocusMinutesToday = cleanMinutes,
             cleanFocusHoursAwarded = cleanHoursAwarded,
-            isCleanDayBonusAwarded = isCleanBonusAwarded
+            isCleanDayBonusAwarded = isCleanBonusAwarded,
+            dailyGraceBudgetMinutes = graceBudget,
+            graceMinutesUsedToday = graceUsedToday,
+            overBudgetOpensToday = overBudgetToday,
+            currentStreakDays = currentStreak,
+            longestStreakDays = longestStreak,
+            streakFreezesOwned = streakFreezes
         )
     }
 
@@ -304,21 +315,71 @@ class PreferencesManager(private val context: Context) {
         }
     }
 
-    private fun checkAndAwardPendingBonus(prefs: androidx.datastore.preferences.core.MutablePreferences) {
-        val prevCleanBonusAwarded = prefs[KEY_CLEAN_DAY_BONUS_AWARDED] ?: false
-        if (!prevCleanBonusAwarded) {
-            val prevTotal = prefs[KEY_TOTAL_INTERCEPTIONS] ?: 0
-            val prevProceeded = prefs[KEY_PROCEEDED] ?: 0
-            val bonus = when {
-                prevTotal == 0 -> 50
-                prevTotal in 1..2 && prevProceeded == 0 -> 25
-                else -> 0
-            }
-            if (bonus > 0) {
+    private fun rolloverDayIfNeeded(
+        prefs: MutablePreferences,
+        today: String
+    ) {
+        val savedDate = prefs[KEY_TODAY_DATE] ?: ""
+        if (savedDate == today) return
+
+        if (savedDate.isNotBlank()) {
+            val graceBudget = readDailyGraceBudget(prefs)
+            val preset = GraceBudgetPreset.fromMinutes(graceBudget)
+            val overBudgetOpens = prefs[KEY_OVER_BUDGET_OPENS_TODAY] ?: 0
+            val graceUsed = prefs[KEY_GRACE_USED_TODAY] ?: 0
+            val prevCleanBonusAwarded = prefs[KEY_CLEAN_DAY_BONUS_AWARDED] ?: false
+
+            // Award Clean Day bonus if eligible and not yet awarded
+            if (!prevCleanBonusAwarded && overBudgetOpens == 0) {
+                val bonus = if (graceUsed == 0) {
+                    preset.cleanDayBonus
+                } else {
+                    (preset.cleanDayBonus / 2).coerceAtLeast(5)
+                }
                 val lifetime = prefs[KEY_LIFETIME_POINTS] ?: 0
                 prefs[KEY_LIFETIME_POINTS] = lifetime + bonus
             }
+
+            // Update Daily Mindful Streak
+            val currentStreak = prefs[KEY_CURRENT_STREAK_DAYS] ?: 0
+            val longestStreak = prefs[KEY_LONGEST_STREAK_DAYS] ?: 0
+            val freezesOwned = prefs[KEY_STREAK_FREEZES_OWNED] ?: 0
+
+            if (overBudgetOpens == 0) {
+                val newStreak = currentStreak + 1
+                prefs[KEY_CURRENT_STREAK_DAYS] = newStreak
+                prefs[KEY_LONGEST_STREAK_DAYS] = maxOf(longestStreak, newStreak)
+            } else if (freezesOwned > 0 && currentStreak > 0) {
+                prefs[KEY_STREAK_FREEZES_OWNED] = freezesOwned - 1
+            } else {
+                prefs[KEY_CURRENT_STREAK_DAYS] = 0
+            }
         }
+
+        prefs[KEY_TODAY_DATE] = today
+        prefs[KEY_TOTAL_INTERCEPTIONS] = 0
+        prefs[KEY_WALKED_AWAY] = 0
+        prefs[KEY_PROCEEDED] = 0
+        prefs[KEY_MINUTES_SAVED] = 0
+        prefs[KEY_POINTS_TODAY] = 0
+        prefs[KEY_CLEAN_HOURS_AWARDED_TODAY] = 0
+        prefs[KEY_CLEAN_DAY_BONUS_AWARDED] = false
+        prefs[KEY_GRACE_USED_TODAY] = 0
+        prefs[KEY_OVER_BUDGET_OPENS_TODAY] = 0
+    }
+
+    suspend fun buyStreakFreeze(): Boolean {
+        var purchased = false
+        context.dataStore.edit { prefs ->
+            val lifetime = prefs[KEY_LIFETIME_POINTS] ?: 0
+            val freezes = prefs[KEY_STREAK_FREEZES_OWNED] ?: 0
+            if (lifetime >= STREAK_FREEZE_COST && freezes < MAX_STREAK_FREEZES) {
+                prefs[KEY_LIFETIME_POINTS] = lifetime - STREAK_FREEZE_COST
+                prefs[KEY_STREAK_FREEZES_OWNED] = freezes + 1
+                purchased = true
+            }
+        }
+        return purchased
     }
 
     suspend fun syncCleanFocus(): DailyStats {
@@ -333,52 +394,26 @@ class PreferencesManager(private val context: Context) {
             if (!isShieldActive) {
                 return@edit
             }
-            val savedDate = prefs[KEY_TODAY_DATE] ?: ""
-            if (savedDate != today) {
-                if (savedDate.isNotBlank()) {
-                    checkAndAwardPendingBonus(prefs)
-                }
-                prefs[KEY_TODAY_DATE] = today
-                prefs[KEY_TOTAL_INTERCEPTIONS] = 0
-                prefs[KEY_WALKED_AWAY] = 0
-                prefs[KEY_PROCEEDED] = 0
-                prefs[KEY_MINUTES_SAVED] = 0
-                prefs[KEY_POINTS_TODAY] = 0
-                prefs[KEY_CLEAN_HOURS_AWARDED_TODAY] = 0
-                prefs[KEY_CLEAN_DAY_BONUS_AWARDED] = false
-            }
+
+            rolloverDayIfNeeded(prefs, today)
 
             val lastInterruption = prefs[KEY_LAST_INTERRUPTION_TIMESTAMP] ?: 0L
+            if (lastInterruption <= 0L) {
+                prefs[KEY_LAST_INTERRUPTION_TIMESTAMP] = now
+                return@edit
+            }
+
+            val graceBudget = readDailyGraceBudget(prefs)
+            val preset = GraceBudgetPreset.fromMinutes(graceBudget)
+
             val cleanMinutes = calculateCleanFocusMinutes(lastInterruption, now)
             val fullHours = cleanMinutes / 60
             val alreadyAwardedHours = prefs[KEY_CLEAN_HOURS_AWARDED_TODAY] ?: 0
 
             if (fullHours > alreadyAwardedHours) {
                 val hoursToAward = fullHours - alreadyAwardedHours
-                newPointsToAdd += hoursToAward * 10
+                newPointsToAdd += hoursToAward * preset.hourlyPoints
                 prefs[KEY_CLEAN_HOURS_AWARDED_TODAY] = fullHours
-            }
-
-            val calEnd = Calendar.getInstance().apply {
-                timeInMillis = now
-                set(Calendar.HOUR_OF_DAY, 22)
-                set(Calendar.MINUTE, 0)
-                set(Calendar.SECOND, 0)
-                set(Calendar.MILLISECOND, 0)
-            }
-            val isPast22 = now >= calEnd.timeInMillis
-            val cleanBonusAwarded = prefs[KEY_CLEAN_DAY_BONUS_AWARDED] ?: false
-
-            if (isPast22 && !cleanBonusAwarded) {
-                val total = prefs[KEY_TOTAL_INTERCEPTIONS] ?: 0
-                val proceeded = prefs[KEY_PROCEEDED] ?: 0
-                if (total == 0) {
-                    newPointsToAdd += 50
-                    prefs[KEY_CLEAN_DAY_BONUS_AWARDED] = true
-                } else if (total in 1..2 && proceeded == 0) {
-                    newPointsToAdd += 25
-                    prefs[KEY_CLEAN_DAY_BONUS_AWARDED] = true
-                }
             }
 
             if (newPointsToAdd > 0) {
@@ -395,24 +430,9 @@ class PreferencesManager(private val context: Context) {
         val today = getTodayDateString()
         val now = System.currentTimeMillis()
         context.dataStore.edit { prefs ->
-            val savedDate = prefs[KEY_TODAY_DATE] ?: ""
-            if (savedDate != today) {
-                if (savedDate.isNotBlank()) {
-                    checkAndAwardPendingBonus(prefs)
-                }
-                prefs[KEY_TODAY_DATE] = today
-                prefs[KEY_TOTAL_INTERCEPTIONS] = 1
-                prefs[KEY_WALKED_AWAY] = 0
-                prefs[KEY_PROCEEDED] = 0
-                prefs[KEY_MINUTES_SAVED] = 0
-                prefs[KEY_POINTS_TODAY] = 0
-                prefs[KEY_CLEAN_HOURS_AWARDED_TODAY] = 0
-                prefs[KEY_CLEAN_DAY_BONUS_AWARDED] = false
-            } else {
-                val current = prefs[KEY_TOTAL_INTERCEPTIONS] ?: 0
-                prefs[KEY_TOTAL_INTERCEPTIONS] = current + 1
-            }
-
+            rolloverDayIfNeeded(prefs, today)
+            val current = prefs[KEY_TOTAL_INTERCEPTIONS] ?: 0
+            prefs[KEY_TOTAL_INTERCEPTIONS] = current + 1
 
             // Update app intervention history for Relapse Resistance
             if (packageName.isNotBlank()) {
@@ -435,46 +455,38 @@ class PreferencesManager(private val context: Context) {
     suspend fun recordWalkAway(minutesSavedEstimate: Int = 15, isAlternativeActivity: Boolean = false) {
         val today = getTodayDateString()
         context.dataStore.edit { prefs ->
-            val savedDate = prefs[KEY_TODAY_DATE] ?: ""
-            if (savedDate == today) {
-                val walked = prefs[KEY_WALKED_AWAY] ?: 0
-                val saved = prefs[KEY_MINUTES_SAVED] ?: 0
-                prefs[KEY_WALKED_AWAY] = walked + 1
-                prefs[KEY_MINUTES_SAVED] = saved + minutesSavedEstimate
-            } else {
-                if (savedDate.isNotBlank()) {
-                    checkAndAwardPendingBonus(prefs)
-                }
-                prefs[KEY_TODAY_DATE] = today
-                prefs[KEY_TOTAL_INTERCEPTIONS] = 1
-                prefs[KEY_WALKED_AWAY] = 1
-                prefs[KEY_PROCEEDED] = 0
-                prefs[KEY_MINUTES_SAVED] = minutesSavedEstimate
-            }
+            rolloverDayIfNeeded(prefs, today)
+            val walked = prefs[KEY_WALKED_AWAY] ?: 0
+            val saved = prefs[KEY_MINUTES_SAVED] ?: 0
+            prefs[KEY_WALKED_AWAY] = walked + 1
+            prefs[KEY_MINUTES_SAVED] = saved + minutesSavedEstimate
         }
     }
 
-    suspend fun recordProceedSession(packageName: String, durationMinutes: Int) {
+    suspend fun recordProceedSession(
+        packageName: String,
+        durationMinutes: Int,
+        useGrace: Boolean = false
+    ) {
         val today = getTodayDateString()
         val now = System.currentTimeMillis()
         val expiresAt = now + (durationMinutes * 60 * 1000L)
         context.dataStore.edit { prefs ->
-            val savedDate = prefs[KEY_TODAY_DATE] ?: ""
-            if (savedDate == today) {
-                val proceeded = prefs[KEY_PROCEEDED] ?: 0
-                prefs[KEY_PROCEEDED] = proceeded + 1
-            } else {
-                if (savedDate.isNotBlank()) {
-                    checkAndAwardPendingBonus(prefs)
-                }
-                prefs[KEY_TODAY_DATE] = today
-                prefs[KEY_TOTAL_INTERCEPTIONS] = 1
-                prefs[KEY_WALKED_AWAY] = 0
-                prefs[KEY_PROCEEDED] = 1
-                prefs[KEY_MINUTES_SAVED] = 0
-            }
+            rolloverDayIfNeeded(prefs, today)
+            val proceeded = prefs[KEY_PROCEEDED] ?: 0
+            prefs[KEY_PROCEEDED] = proceeded + 1
 
-            prefs[KEY_LAST_INTERRUPTION_TIMESTAMP] = now
+            val graceBudget = readDailyGraceBudget(prefs)
+            val graceUsed = prefs[KEY_GRACE_USED_TODAY] ?: 0
+            val graceRemaining = (graceBudget - graceUsed).coerceAtLeast(0)
+
+            if (useGrace && graceRemaining > 0) {
+                prefs[KEY_GRACE_USED_TODAY] = graceUsed + durationMinutes
+            } else {
+                val overBudget = prefs[KEY_OVER_BUDGET_OPENS_TODAY] ?: 0
+                prefs[KEY_OVER_BUDGET_OPENS_TODAY] = overBudget + 1
+                prefs[KEY_LAST_INTERRUPTION_TIMESTAMP] = now
+            }
 
             // Update active sessions map
             val activeSessions = try {

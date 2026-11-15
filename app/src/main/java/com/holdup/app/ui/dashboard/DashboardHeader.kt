@@ -1,5 +1,6 @@
 package com.holdup.app.ui.dashboard
 
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -8,9 +9,12 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.painterResource
@@ -18,6 +22,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.holdup.app.R
+import com.holdup.app.ui.components.zenGlassBorder
 
 @Composable
 fun DashboardHeader(
@@ -61,9 +66,21 @@ fun DashboardHeader(
                     val inactiveColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
                     val isActive = isChildSafetyEnabled || isMonitoringEnabled
 
+                    val pulseTransition = rememberInfiniteTransition(label = "ShieldPulse")
+                    val dotScale by pulseTransition.animateFloat(
+                        initialValue = 0.85f,
+                        targetValue = 1.25f,
+                        animationSpec = infiniteRepeatable(
+                            animation = tween(1400, easing = FastOutSlowInEasing),
+                            repeatMode = RepeatMode.Reverse
+                        ),
+                        label = "ShieldDotScale"
+                    )
+
                     Box(
                         modifier = Modifier
-                            .size(6.dp)
+                            .size(7.dp)
+                            .scale(if (isActive) dotScale else 1f)
                             .clip(CircleShape)
                             .background(if (isActive) activeColor else inactiveColor)
                     )
@@ -79,32 +96,44 @@ fun DashboardHeader(
                     )
                 }
             }
-            Spacer(modifier = Modifier.width(6.dp))
-            IconButton(
-                onClick = onOpenTour,
-                modifier = Modifier.size(32.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Info,
-                    contentDescription = "HoldUp Tour",
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-                    modifier = Modifier.size(18.dp)
-                )
-            }
         }
 
-        Switch(
-            checked = isMonitoringEnabled,
-            onCheckedChange = {
-                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                onToggleMonitoring(it)
-            },
-            colors = SwitchDefaults.colors(
-                checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
-                checkedTrackColor = MaterialTheme.colorScheme.primary,
-                uncheckedThumbColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                uncheckedTrackColor = MaterialTheme.colorScheme.surfaceContainerHighest
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Surface(
+                shape = CircleShape,
+                color = Color.White.copy(alpha = 0.04f),
+                border = zenGlassBorder(),
+                modifier = Modifier.size(36.dp)
+            ) {
+                IconButton(
+                    onClick = onOpenTour,
+                    modifier = Modifier.fillMaxSize()
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Info,
+                        contentDescription = "HoldUp Tour",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+            }
+
+            Switch(
+                checked = isMonitoringEnabled,
+                onCheckedChange = {
+                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                    onToggleMonitoring(it)
+                },
+                colors = SwitchDefaults.colors(
+                    checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
+                    checkedTrackColor = MaterialTheme.colorScheme.primary,
+                    uncheckedThumbColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                    uncheckedTrackColor = MaterialTheme.colorScheme.surfaceContainerHighest
+                )
             )
-        )
+        }
     }
 }

@@ -22,6 +22,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.holdup.app.data.model.DailyStats
+import com.holdup.app.ui.components.zenGlassBorder
 import com.holdup.app.ui.theme.LocalAccentPreset
 
 @Composable
@@ -47,7 +48,7 @@ fun MindfulIntentionCard(
     Surface(
         shape = RoundedCornerShape(24.dp),
         color = MaterialTheme.colorScheme.surfaceContainer,
-        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.08f)),
+        border = zenGlassBorder(),
         modifier = Modifier.fillMaxWidth()
     ) {
         Column(
@@ -59,6 +60,7 @@ fun MindfulIntentionCard(
 
             GaugeDial(
                 percentage = todayStats.successRatePercent,
+                hasInterceptions = todayStats.totalInterceptions > 0,
                 animatedProgress = animatedProgress,
                 primaryColor = primaryColor,
                 trackColor = trackColor,
@@ -123,6 +125,7 @@ private fun IntentionHeader(savedMinutes: Int) {
 @Composable
 private fun GaugeDial(
     percentage: Int,
+    hasInterceptions: Boolean,
     animatedProgress: Float,
     primaryColor: Color,
     trackColor: Color,
@@ -182,11 +185,12 @@ private fun GaugeDial(
                     fontSize = 38.sp,
                     fontWeight = FontWeight.Bold,
                     letterSpacing = (-1).sp,
+                    fontFeatureSettings = "tnum",
                     color = MaterialTheme.colorScheme.onSurface
                 )
             )
             Text(
-                text = "Mindful Win Rate",
+                text = if (hasInterceptions) "Mindful Win Rate" else "Fresh Day • Ready",
                 style = MaterialTheme.typography.labelSmall.copy(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     fontWeight = FontWeight.Medium

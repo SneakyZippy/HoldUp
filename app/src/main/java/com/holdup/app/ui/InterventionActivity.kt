@@ -25,6 +25,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Timer
+import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -133,14 +134,15 @@ class InterventionActivity : ComponentActivity() {
                         }
                         finishAndRemoveTask()
                     },
-                    onOpenSession = { minutes, isPenalized ->
+                    onOpenSession = { minutes, isPenalized, useGrace ->
                         isInterventionActive = false
                         activeTargetPackage = null
                         if (targetPackage.isNotBlank()) {
                             HoldUpAccessibilityService.suppressInterception(targetPackage, 2500L)
                         }
                         if (isTestMode) {
-                            val msg = "Test complete: ${minutes}m session selected" + if (isPenalized) " (-5 pts penalty)" else ""
+                            val graceNote = if (useGrace) " (Grace)" else ""
+                            val msg = "Test complete: ${minutes}m session$graceNote" + if (isPenalized) " (-5 pts penalty)" else ""
                             Toast.makeText(this@InterventionActivity, msg, Toast.LENGTH_SHORT).show()
                             finishAndRemoveTask()
                             return@InterventionScreen
@@ -154,7 +156,7 @@ class InterventionActivity : ComponentActivity() {
                                     Toast.makeText(appContext, "⚠️ 5 mindful points deducted for relapse", Toast.LENGTH_SHORT).show()
                                 }
                             }
-                            app.preferencesManager.recordProceedSession(targetPackage, minutes)
+                            app.preferencesManager.recordProceedSession(targetPackage, minutes, useGrace = useGrace)
                             app.preferencesManager.saveLastChosenDuration(targetPackage, minutes)
                         }
                         SessionMonitorService.startSession(this@InterventionActivity, targetPackage, minutes)
@@ -203,7 +205,7 @@ fun InterventionScreen(
     isTestMode: Boolean = false,
     testType: InterventionType? = null,
     onWalkAway: (Boolean) -> Unit,
-    onOpenSession: (Int, Boolean) -> Unit
+    onOpenSession: (Int, Boolean, Boolean) -> Unit
 ) {
     val coroutineScope = rememberCoroutineScope()
     val prefs = HoldUpApp.instance.preferencesManager
@@ -219,6 +221,7 @@ fun InterventionScreen(
     var displayedAlternatives by remember { mutableStateOf<List<AlternativeActivity>>(emptyList()) }
     var selectedAlternative by remember { mutableStateOf<AlternativeActivity?>(null) }
     var maxSessionMinutes by remember { mutableIntStateOf(15) }
+    var graceMinutesRemaining by remember { mutableIntStateOf(0) }
 
     var relapseState by remember { mutableStateOf(RelapseState()) }
     var relapseRemainingSeconds by remember { mutableIntStateOf(0) }
@@ -277,6 +280,7 @@ fun InterventionScreen(
         countdownSeconds = rule?.countdownSeconds ?: global.defaultCountdownSeconds
         val rememberedDuration = prefs.getLastChosenDuration(targetPackageName)
         maxSessionMinutes = rememberedDuration ?: rule?.maxSessionMinutes ?: global.defaultSessionMinutes
+        graceMinutesRemaining = prefs.todayStats.first().graceMinutesRemaining
 
         if (!isSoftNudge && !isTestMode && targetPackageName.isNotBlank()) {
             val state = prefs.checkRelapseState(targetPackageName)
@@ -338,6 +342,12 @@ fun InterventionScreen(
     }
 
     val isBreathingActive = activeInterventionType == InterventionType.BREATHING && !isSoftNudge
+    val atmosphereColor = when {
+        relapseState.isEscalated -> ZenAmber
+        activeInterventionType == InterventionType.REFLECTION -> ZenLavender
+        activeInterventionType == InterventionType.PHOTO || activeInterventionType == InterventionType.VIDEO -> ZenCoral
+        else -> MaterialTheme.colorScheme.primary
+    }
 
     BoxWithConstraints(
         modifier = Modifier
@@ -346,32 +356,30 @@ fun InterventionScreen(
             .statusBarsPadding()
             .navigationBarsPadding()
     ) {
-        if (isBreathingActive) {
-            val infiniteTransition = rememberInfiniteTransition(label = "AtmospherePulse")
-            val atmosphereAlpha by infiniteTransition.animateFloat(
-                initialValue = 0.08f,
-                targetValue = 0.22f,
-                animationSpec = infiniteRepeatable(
-                    animation = tween(4000, easing = FastOutSlowInEasing),
-                    repeatMode = RepeatMode.Reverse
-                ),
-                label = "AtmosphereAlpha"
-            )
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(
-                        androidx.compose.ui.graphics.Brush.radialGradient(
-                            colors = listOf(
-                                MaterialTheme.colorScheme.primary.copy(alpha = atmosphereAlpha),
-                                MaterialTheme.colorScheme.secondary.copy(alpha = atmosphereAlpha * 0.4f),
-                                Color.Transparent
-                            ),
-                            radius = 1200f
-                        )
+        val infiniteTransition = rememberInfiniteTransition(label = "AtmospherePulse")
+        val atmosphereAlpha by infiniteTransition.animateFloat(
+            initialValue = if (isBreathingActive) 0.08f else 0.05f,
+            targetValue = if (isBreathingActive) 0.22f else 0.12f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(if (isBreathingActive) 4000 else 6000, easing = FastOutSlowInEasing),
+                repeatMode = RepeatMode.Reverse
+            ),
+            label = "AtmosphereAlpha"
+        )
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(
+                    androidx.compose.ui.graphics.Brush.radialGradient(
+                        colors = listOf(
+                            atmosphereColor.copy(alpha = atmosphereAlpha),
+                            MaterialTheme.colorScheme.secondary.copy(alpha = atmosphereAlpha * 0.35f),
+                            Color.Transparent
+                        ),
+                        radius = 1200f
                     )
-            )
-        }
+                )
+        )
 
         val minHeight = maxHeight
         Column(
@@ -399,8 +407,15 @@ fun InterventionScreen(
                             modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
+                            Icon(
+                                imageVector = Icons.Default.Visibility,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(14.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
                             Text(
-                                text = "🧪 Live Preview • ${activeInterventionType.displayName}",
+                                text = "Live Preview • ${activeInterventionType.displayName}",
                                 style = MaterialTheme.typography.labelSmall.copy(
                                     fontWeight = FontWeight.Bold,
                                     color = MaterialTheme.colorScheme.primary
@@ -563,6 +578,7 @@ fun InterventionScreen(
                         isSoftNudge = isSoftNudge,
                         targetPackageName = targetPackageName,
                         maxSessionMinutes = maxSessionMinutes,
+                        graceMinutesRemaining = graceMinutesRemaining,
                         relapseState = relapseState,
                         selectedAlternative = selectedAlternative,
                         onWalkAway = { onWalkAway(selectedAlternative != null) },
@@ -639,10 +655,11 @@ fun DecisionFooter(
     isSoftNudge: Boolean,
     targetPackageName: String,
     maxSessionMinutes: Int = 15,
+    graceMinutesRemaining: Int = 0,
     relapseState: RelapseState = RelapseState(),
     selectedAlternative: AlternativeActivity?,
     onWalkAway: () -> Unit,
-    onOpenSession: (Int, Boolean) -> Unit
+    onOpenSession: (Int, Boolean, Boolean) -> Unit
 ) {
     val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
     val context = androidx.compose.ui.platform.LocalContext.current
@@ -658,8 +675,14 @@ fun DecisionFooter(
     }
 
     var currentStep by remember { mutableStateOf(DecisionStep.ASK_ENTER) }
-    var selectedMinutes by remember { mutableIntStateOf(if (maxSessionMinutes in 1..60) maxSessionMinutes else 10) }
-    var sliderValue by remember { mutableFloatStateOf(selectedMinutes.toFloat()) }
+    val defaultMins = if (maxSessionMinutes in 1..60) maxSessionMinutes else 10
+    val initialMins = if (graceMinutesRemaining > 0 && !relapseState.isEscalated) {
+        minOf(defaultMins, graceMinutesRemaining).coerceAtLeast(1)
+    } else {
+        defaultMins
+    }
+    var selectedMinutes by remember(initialMins) { mutableIntStateOf(initialMins) }
+    var sliderValue by remember(initialMins) { mutableFloatStateOf(initialMins.toFloat()) }
 
     BackHandler(enabled = true) {
         if (currentStep == DecisionStep.CHOOSE_DURATION) {
@@ -778,11 +801,15 @@ fun DecisionFooter(
                             contentAlignment = Alignment.Center,
                             modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp)
                         ) {
+                            val canUseGrace = graceMinutesRemaining > 0 && !relapseState.isEscalated && !isSoftNudge
                             Text(
-                                text = if (appName.isNotBlank()) {
-                                    if (relapseState.isEscalated) "Open $appName mindfully (-5 pts)" else "Open $appName mindfully"
-                                } else {
-                                    if (relapseState.isEscalated) "Continue mindfully (-5 pts)" else "Continue mindfully"
+                                text = when {
+                                    relapseState.isEscalated && appName.isNotBlank() -> "Open $appName mindfully (-5 pts)"
+                                    relapseState.isEscalated -> "Continue mindfully (-5 pts)"
+                                    canUseGrace && appName.isNotBlank() -> "Use Grace on $appName (${graceMinutesRemaining}m left)"
+                                    canUseGrace -> "Use Grace (${graceMinutesRemaining}m left)"
+                                    appName.isNotBlank() -> "Open $appName (resets Clean Focus)"
+                                    else -> "Continue (resets Clean Focus)"
                                 },
                                 style = MaterialTheme.typography.bodyMedium.copy(
                                     fontWeight = if (relapseState.isEscalated) FontWeight.SemiBold else FontWeight.Medium,
@@ -808,10 +835,22 @@ fun DecisionFooter(
 
                     Spacer(modifier = Modifier.height(4.dp))
 
+                    val willUseGrace = graceMinutesRemaining > 0 && selectedMinutes <= graceMinutesRemaining && !relapseState.isEscalated && !isSoftNudge
                     Text(
-                        text = if (relapseState.isEscalated) "Relapse session: -5 mindful points will be deducted" else "A gentle nudge will sound when time is up",
+                        text = when {
+                            relapseState.isEscalated -> "Relapse session: -5 mindful points will be deducted"
+                            willUseGrace -> "Uses ${selectedMinutes}m of ${graceMinutesRemaining}m Daily Grace • Streak stays safe"
+                            graceMinutesRemaining > 0 && !isSoftNudge -> "Exceeds ${graceMinutesRemaining}m Grace • Resets Clean Focus"
+                            !isSoftNudge -> "No Grace left today • Resets Clean Focus"
+                            else -> "A gentle nudge will sound when time is up"
+                        },
                         style = MaterialTheme.typography.bodyMedium.copy(
-                            color = if (relapseState.isEscalated) Color(0xFFFFB74D) else MaterialTheme.colorScheme.onSurfaceVariant
+                            color = when {
+                                relapseState.isEscalated -> Color(0xFFFFB74D)
+                                willUseGrace -> MaterialTheme.colorScheme.primary
+                                !isSoftNudge -> ZenAmber
+                                else -> MaterialTheme.colorScheme.onSurfaceVariant
+                            }
                         ),
                         textAlign = androidx.compose.ui.text.style.TextAlign.Center
                     )
@@ -916,10 +955,11 @@ fun DecisionFooter(
                     Spacer(modifier = Modifier.height(18.dp))
 
                     // Enter Button
+                    val useGraceOnEnter = graceMinutesRemaining > 0 && selectedMinutes <= graceMinutesRemaining && !relapseState.isEscalated && !isSoftNudge
                     Button(
                         onClick = {
                             haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
-                            onOpenSession(selectedMinutes, relapseState.isEscalated)
+                            onOpenSession(selectedMinutes, relapseState.isEscalated, useGraceOnEnter)
                         },
                         colors = ButtonDefaults.buttonColors(
                             containerColor = if (relapseState.isEscalated) {
@@ -936,12 +976,11 @@ fun DecisionFooter(
                             .defaultMinSize(minHeight = 54.dp)
                     ) {
                         Text(
-                            text = if (isSoftNudge) {
-                                "Continue for $selectedMinutes min"
-                            } else if (relapseState.isEscalated) {
-                                "Enter for $selectedMinutes min (-5 pts)"
-                            } else {
-                                "Enter for $selectedMinutes min"
+                            text = when {
+                                isSoftNudge -> "Continue for $selectedMinutes min"
+                                relapseState.isEscalated -> "Enter for $selectedMinutes min (-5 pts)"
+                                useGraceOnEnter -> "Use Grace ($selectedMinutes min)"
+                                else -> "Enter for $selectedMinutes min"
                             },
                             style = MaterialTheme.typography.titleMedium.copy(
                                 fontWeight = FontWeight.Bold,

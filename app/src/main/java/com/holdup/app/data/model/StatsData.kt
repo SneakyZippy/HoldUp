@@ -2,6 +2,40 @@ package com.holdup.app.data.model
 
 import kotlinx.serialization.Serializable
 
+/**
+ * Selectable daily grace budgets. Stricter budgets award higher Clean Focus and Clean Day points.
+ */
+enum class GraceBudgetPreset(
+    val minutes: Int,
+    val label: String,
+    val multiplierLabel: String,
+    val hourlyPoints: Int,
+    val cleanDayBonus: Int
+) {
+    STRICT(minutes = 0, label = "Off (0m)", multiplierLabel = "2.0×", hourlyPoints = 20, cleanDayBonus = 80),
+    MINIMAL(minutes = 5, label = "5m", multiplierLabel = "1.5×", hourlyPoints = 15, cleanDayBonus = 60),
+    BALANCED(minutes = 15, label = "15m", multiplierLabel = "1.0×", hourlyPoints = 10, cleanDayBonus = 40),
+    FLEXIBLE(minutes = 30, label = "30m", multiplierLabel = "0.7×", hourlyPoints = 7, cleanDayBonus = 25),
+    LIGHT(minutes = 60, label = "1h", multiplierLabel = "0.4×", hourlyPoints = 4, cleanDayBonus = 15);
+
+    companion object {
+        fun fromMinutes(minutes: Int): GraceBudgetPreset {
+            return entries.minByOrNull { kotlin.math.abs(it.minutes - minutes) } ?: BALANCED
+        }
+    }
+}
+
+enum class StreakMilestone(
+    val days: Int,
+    val title: String,
+    val subtitle: String
+) {
+    SPARK(days = 3, title = "3-Day Spark", subtitle = "3 mindful days in a row"),
+    STEADY(days = 7, title = "7-Day Steady", subtitle = "A full week within grace"),
+    GROUNDED(days = 14, title = "14-Day Grounded", subtitle = "Two weeks of intention"),
+    UNSHAKEABLE(days = 30, title = "30-Day Unshakeable", subtitle = "A full month of mastery")
+}
+
 @Serializable
 data class DailyStats(
     val dateString: String = "",
@@ -13,8 +47,26 @@ data class DailyStats(
     val lifetimePoints: Int = 0,
     val cleanFocusMinutesToday: Int = 0,
     val cleanFocusHoursAwarded: Int = 0,
-    val isCleanDayBonusAwarded: Boolean = false
+    val isCleanDayBonusAwarded: Boolean = false,
+    val dailyGraceBudgetMinutes: Int = 15,
+    val graceMinutesUsedToday: Int = 0,
+    val overBudgetOpensToday: Int = 0,
+    val currentStreakDays: Int = 0,
+    val longestStreakDays: Int = 0,
+    val streakFreezesOwned: Int = 0
 ) {
+    val gracePreset: GraceBudgetPreset
+        get() = GraceBudgetPreset.fromMinutes(dailyGraceBudgetMinutes)
+
+    val graceMinutesRemaining: Int
+        get() = (dailyGraceBudgetMinutes - graceMinutesUsedToday).coerceAtLeast(0)
+
+    val isWithinGraceToday: Boolean
+        get() = overBudgetOpensToday == 0
+
+    val unlockedMilestones: List<StreakMilestone>
+        get() = StreakMilestone.entries.filter { longestStreakDays >= it.days || currentStreakDays >= it.days }
+
     val successRatePercent: Int
         get() = if (totalInterceptions > 0) {
             ((walkedAwayCount.toFloat() / totalInterceptions.toFloat()) * 100).toInt()
@@ -23,10 +75,13 @@ data class DailyStats(
         }
 
     val cleanDayBonusStatus: String
-        get() = when {
-            totalInterceptions == 0 -> "Pure Zen (+50 pts)"
-            totalInterceptions in 1..2 && proceededCount == 0 -> "Mindful Recovery (+25 pts)"
-            else -> "Interrupted"
+        get() {
+            val bonus = gracePreset.cleanDayBonus
+            return when {
+                overBudgetOpensToday == 0 && graceMinutesUsedToday == 0 -> "Pure Zen (+$bonus pts)"
+                overBudgetOpensToday == 0 -> "Within Grace (+${(bonus / 2).coerceAtLeast(5)} pts)"
+                else -> "Grace Exceeded"
+            }
         }
 
     val currentCleanStreakHours: Int

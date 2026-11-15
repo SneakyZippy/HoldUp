@@ -1,18 +1,22 @@
 package com.holdup.app.ui
 
+import android.Manifest
 import android.app.AppOpsManager
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.Process
 import android.provider.Settings
+import androidx.core.content.ContextCompat
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
@@ -149,11 +153,25 @@ fun MainScreen(
 
     var isAccessibilityGranted by remember { mutableStateOf(false) }
     var isUsageAccessGranted by remember { mutableStateOf(false) }
+    var isNotificationsGranted by remember { mutableStateOf(true) }
     var showAccessibilityDisclosure by remember { mutableStateOf(false) }
 
     fun checkPermissions() {
         isAccessibilityGranted = checkAccessibilityPermission(context)
         isUsageAccessGranted = checkUsageStatsPermission(context)
+        isNotificationsGranted = checkNotificationPermission(context)
+    }
+
+    val notificationPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        isNotificationsGranted = granted || checkNotificationPermission(context)
+    }
+
+    fun requestNotificationPermission() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
     }
 
     LaunchedEffect(Unit) {
@@ -174,6 +192,7 @@ fun MainScreen(
             },
             isAccessibilityGranted = isAccessibilityGranted,
             isUsageAccessGranted = isUsageAccessGranted,
+            isNotificationsGranted = isNotificationsGranted,
             onOpenAccessibilitySettings = {
                 showAccessibilityDisclosure = true
             },
@@ -181,6 +200,7 @@ fun MainScreen(
                 val intent = Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS)
                 context.startActivity(intent)
             },
+            onRequestNotificationPermission = { requestNotificationPermission() },
             onCompleteOnboarding = {
                 coroutineScope.launch { prefs.setOnboardingCompleted(true) }
                 showOnboardingManually = false
@@ -199,155 +219,131 @@ fun MainScreen(
         return
     }
 
-    Scaffold(
-        containerColor = MaterialTheme.colorScheme.background,
-        bottomBar = {
-            NavigationBar(
-                containerColor = ZenSurface.copy(alpha = 0.95f),
-                tonalElevation = 0.dp,
-                modifier = Modifier.border(BorderStroke(1.dp, ZenBorderSubtle))
-            ) {
-                NavigationBarItem(
-                    selected = currentTab == 0,
-                    onClick = { currentTab = 0 },
-                    icon = { Icon(Icons.Default.Dashboard, contentDescription = null) },
-                    label = { Text("Dashboard") },
-                    colors = NavigationBarItemDefaults.colors(
-                        selectedIconColor = MaterialTheme.colorScheme.primary,
-                        selectedTextColor = MaterialTheme.colorScheme.primary,
-                        indicatorColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.16f),
-                        unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                        unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                )
-                NavigationBarItem(
-                    selected = currentTab == 1,
-                    onClick = { currentTab = 1 },
-                    icon = { Icon(Icons.Default.Apps, contentDescription = null) },
-                    label = { Text("Apps") },
-                    colors = NavigationBarItemDefaults.colors(
-                        selectedIconColor = MaterialTheme.colorScheme.primary,
-                        selectedTextColor = MaterialTheme.colorScheme.primary,
-                        indicatorColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.16f),
-                        unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                        unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                )
-                NavigationBarItem(
-                    selected = currentTab == 2,
-                    onClick = { currentTab = 2 },
-                    icon = { Icon(Icons.Default.Tune, contentDescription = null) },
-                    label = { Text("Studio") },
-                    colors = NavigationBarItemDefaults.colors(
-                        selectedIconColor = MaterialTheme.colorScheme.primary,
-                        selectedTextColor = MaterialTheme.colorScheme.primary,
-                        indicatorColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.16f),
-                        unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                        unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                )
-                NavigationBarItem(
-                    selected = currentTab == 3,
-                    onClick = { currentTab = 3 },
-                    icon = { Icon(Icons.Default.Settings, contentDescription = null) },
-                    label = { Text("Settings") },
-                    colors = NavigationBarItemDefaults.colors(
-                        selectedIconColor = MaterialTheme.colorScheme.primary,
-                        selectedTextColor = MaterialTheme.colorScheme.primary,
-                        indicatorColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.16f),
-                        unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                        unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+    ZenAmbientBackground {
+        Scaffold(
+            containerColor = Color.Transparent,
+            contentColor = MaterialTheme.colorScheme.onBackground,
+            bottomBar = {
+                ZenPillNavBar(
+                    items = listOf(
+                        PillNavItem("Dashboard", Icons.Default.Dashboard),
+                        PillNavItem("Apps", Icons.Default.Apps),
+                        PillNavItem("Studio", Icons.Default.Tune),
+                        PillNavItem("Settings", Icons.Default.Settings)
+                    ),
+                    selectedIndex = currentTab,
+                    onSelect = { currentTab = it }
                 )
             }
-        }
-    ) { paddingValues ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(paddingValues)
-                .statusBarsPadding()
-        ) {
-            when (currentTab) {
-                0 -> DashboardTab(
-                    isMonitoringEnabled = isMonitoringEnabled,
-                    isChildSafetyEnabled = isChildSafetyEnabled,
-                    onToggleMonitoring = { enabled ->
-                        if (isChildSafetyEnabled && !enabled) {
-                            android.widget.Toast.makeText(context, "Disable Hard Lockout in Settings to pause monitoring", android.widget.Toast.LENGTH_SHORT).show()
-                        } else {
-                            coroutineScope.launch { prefs.setMonitoringEnabled(enabled) }
-                        }
-                    },
-                    todayStats = todayStats,
-                    monitoredPackages = monitoredPackages,
-                    isAccessibilityGranted = isAccessibilityGranted,
-                    isUsageAccessGranted = isUsageAccessGranted,
-                    onOpenAccessibilitySettings = {
-                        showAccessibilityDisclosure = true
-                    },
-                    onOpenUsageSettings = {
-                        val intent = Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS)
-                        context.startActivity(intent)
-                    },
-                    onOpenTour = { showOnboardingManually = true }
-                )
-                1 -> AppsTab(
-                    monitoredPackages = monitoredPackages,
-                    perAppRules = perAppRules,
-                    onToggleApp = { pkg, isMonitored ->
-                        coroutineScope.launch { prefs.toggleAppMonitored(pkg, isMonitored) }
-                    },
-                    onConfigureApp = { appItem ->
-                        selectedAppForRule = appItem
+        ) { paddingValues ->
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(paddingValues)
+                    .statusBarsPadding()
+            ) {
+                Crossfade(
+                    targetState = currentTab,
+                    animationSpec = tween(220),
+                    label = "MainTabCrossfade"
+                ) { tab ->
+                    when (tab) {
+                        0 -> DashboardTab(
+                            isMonitoringEnabled = isMonitoringEnabled,
+                            isChildSafetyEnabled = isChildSafetyEnabled,
+                            onToggleMonitoring = { enabled ->
+                                if (isChildSafetyEnabled && !enabled) {
+                                    android.widget.Toast.makeText(context, "Disable Hard Lockout in Settings to pause monitoring", android.widget.Toast.LENGTH_SHORT).show()
+                                } else {
+                                    coroutineScope.launch { prefs.setMonitoringEnabled(enabled) }
+                                }
+                            },
+                            todayStats = todayStats,
+                            monitoredPackages = monitoredPackages,
+                            isAccessibilityGranted = isAccessibilityGranted,
+                            isUsageAccessGranted = isUsageAccessGranted,
+                            onOpenAccessibilitySettings = {
+                                showAccessibilityDisclosure = true
+                            },
+                            onOpenUsageSettings = {
+                                val intent = Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS)
+                                context.startActivity(intent)
+                            },
+                            onOpenTour = { showOnboardingManually = true },
+                            onBuyStreakFreeze = {
+                                coroutineScope.launch {
+                                    val bought = prefs.buyStreakFreeze()
+                                    val msg = if (bought) "Streak Freeze added!" else "Need 100 pts (max 2 freezes)"
+                                    android.widget.Toast.makeText(context, msg, android.widget.Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                        )
+                        1 -> AppsTab(
+                            monitoredPackages = monitoredPackages,
+                            perAppRules = perAppRules,
+                            onToggleApp = { pkg, isMonitored ->
+                                coroutineScope.launch { prefs.toggleAppMonitored(pkg, isMonitored) }
+                            },
+                            onConfigureApp = { appItem ->
+                                selectedAppForRule = appItem
+                            }
+                        )
+                        2 -> InterventionsTab(
+                            globalSettings = globalSettings,
+                            alternatives = alternatives,
+                            customReflections = customReflections,
+                            dismissedReflections = dismissedReflections,
+                            onSaveSettings = { updated ->
+                                coroutineScope.launch { prefs.saveGlobalSettings(updated) }
+                            },
+                            onAddCustomReflection = { text ->
+                                coroutineScope.launch { prefs.addCustomReflection(text) }
+                            },
+                            onResetDismissedReflections = {
+                                coroutineScope.launch { prefs.resetDismissedReflections() }
+                            },
+                            onOpenQuotesManager = { showQuotesBottomSheet = true },
+                            onOpenSwapsManager = { showSwapsBottomSheet = true }
+                        )
+                        3 -> SettingsTab(
+                            isChildSafetyEnabled = isChildSafetyEnabled,
+                            hasParentPin = hasParentPin,
+                            onSetChildSafetyEnabled = { enabled ->
+                                coroutineScope.launch { prefs.setChildSafetyEnabled(enabled) }
+                            },
+                            onSetParentPin = { pin ->
+                                coroutineScope.launch { prefs.setParentPin(pin) }
+                            },
+                            onVerifyParentPin = { pin ->
+                                prefs.verifyParentPin(pin)
+                            },
+                            isAccessibilityGranted = isAccessibilityGranted,
+                            isUsageAccessGranted = isUsageAccessGranted,
+                            isNotificationsGranted = isNotificationsGranted,
+                            onOpenAccessibilitySettings = {
+                                showAccessibilityDisclosure = true
+                            },
+                            onOpenUsageSettings = {
+                                val intent = Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS)
+                                context.startActivity(intent)
+                            },
+                            onRequestNotificationPermission = { requestNotificationPermission() },
+                            onReplayOnboarding = { showOnboardingManually = true },
+                            isRelapseResistanceEnabled = isRelapseResistanceEnabled,
+                            onSetRelapseResistanceEnabled = { enabled ->
+                                coroutineScope.launch { prefs.setRelapseResistanceEnabled(enabled) }
+                            },
+                            dailyGraceMinutes = globalSettings.dailyGraceMinutes,
+                            onSetDailyGraceMinutes = { mins ->
+                                coroutineScope.launch {
+                                    prefs.saveGlobalSettings(globalSettings.copy(dailyGraceMinutes = mins))
+                                }
+                            },
+                            currentAccentPreset = accentPreset,
+                            onSelectAccentPreset = onSelectAccentPreset
+                        )
                     }
-                )
-                2 -> InterventionsTab(
-                    globalSettings = globalSettings,
-                    alternatives = alternatives,
-                    customReflections = customReflections,
-                    dismissedReflections = dismissedReflections,
-                    onSaveSettings = { updated ->
-                        coroutineScope.launch { prefs.saveGlobalSettings(updated) }
-                    },
-                    onAddCustomReflection = { text ->
-                        coroutineScope.launch { prefs.addCustomReflection(text) }
-                    },
-                    onResetDismissedReflections = {
-                        coroutineScope.launch { prefs.resetDismissedReflections() }
-                    },
-                    onOpenQuotesManager = { showQuotesBottomSheet = true },
-                    onOpenSwapsManager = { showSwapsBottomSheet = true }
-                )
-                3 -> SettingsTab(
-                    isChildSafetyEnabled = isChildSafetyEnabled,
-                    hasParentPin = hasParentPin,
-                    onSetChildSafetyEnabled = { enabled ->
-                        coroutineScope.launch { prefs.setChildSafetyEnabled(enabled) }
-                    },
-                    onSetParentPin = { pin ->
-                        coroutineScope.launch { prefs.setParentPin(pin) }
-                    },
-                    onVerifyParentPin = { pin ->
-                        prefs.verifyParentPin(pin)
-                    },
-                    isAccessibilityGranted = isAccessibilityGranted,
-                    isUsageAccessGranted = isUsageAccessGranted,
-                    onOpenAccessibilitySettings = {
-                        showAccessibilityDisclosure = true
-                    },
-                    onOpenUsageSettings = {
-                        val intent = Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS)
-                        context.startActivity(intent)
-                    },
-                    onReplayOnboarding = { showOnboardingManually = true },
-                    isRelapseResistanceEnabled = isRelapseResistanceEnabled,
-                    onSetRelapseResistanceEnabled = { enabled ->
-                        coroutineScope.launch { prefs.setRelapseResistanceEnabled(enabled) }
-                    },
-                    currentAccentPreset = accentPreset,
-                    onSelectAccentPreset = onSelectAccentPreset
-                )
+                }
             }
         }
     }
@@ -549,6 +545,7 @@ fun AppsTab(
     val haptic = LocalHapticFeedback.current
     var installedApps by remember { mutableStateOf<List<InstalledAppItem>>(emptyList()) }
     var searchQuery by remember { mutableStateOf("") }
+    var selectedFilter by remember { mutableIntStateOf(0) } // 0 = All, 1 = Shielded, 2 = Unshielded
     var isLoading by remember { mutableStateOf(true) }
 
     LaunchedEffect(Unit) {
@@ -578,20 +575,46 @@ fun AppsTab(
         }
     }
 
+    val shieldedCount = remember(installedApps, monitoredPackages) {
+        installedApps.count { monitoredPackages.contains(it.packageName) }
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
             .padding(horizontal = 20.dp)
     ) {
         Spacer(modifier = Modifier.height(10.dp))
-        Text(
-            text = "Monitored Apps",
-            style = MaterialTheme.typography.headlineLarge.copy(
-                fontWeight = FontWeight.Bold,
-                fontSize = 26.sp,
-                color = MaterialTheme.colorScheme.onBackground
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "Monitored Apps",
+                style = MaterialTheme.typography.headlineLarge.copy(
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 26.sp,
+                    color = MaterialTheme.colorScheme.onBackground
+                )
             )
-        )
+            if (!isLoading) {
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.25f))
+                ) {
+                    Text(
+                        text = "$shieldedCount shielded",
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.primary
+                        ),
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                    )
+                }
+            }
+        }
         Text(
             text = "Tap any app to customize its active hours & pause style",
             style = MaterialTheme.typography.bodyMedium.copy(color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -604,6 +627,17 @@ fun AppsTab(
             onValueChange = { searchQuery = it },
             placeholder = { Text("Search installed apps...", color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)) },
             leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant) },
+            trailingIcon = {
+                if (searchQuery.isNotEmpty()) {
+                    IconButton(onClick = { searchQuery = "" }) {
+                        Icon(
+                            imageVector = Icons.Default.Clear,
+                            contentDescription = "Clear search",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            },
             singleLine = true,
             shape = RoundedCornerShape(18.dp),
             colors = OutlinedTextFieldDefaults.colors(
@@ -615,16 +649,57 @@ fun AppsTab(
             modifier = Modifier.fillMaxWidth()
         )
 
-        Spacer(modifier = Modifier.height(14.dp))
+        Spacer(modifier = Modifier.height(10.dp))
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            listOf("All", "Shielded", "Unshielded").forEachIndexed { index, label ->
+                val isSelected = selectedFilter == index
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.16f) else Color.White.copy(alpha = 0.04f),
+                    border = BorderStroke(
+                        1.dp,
+                        if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.4f) else Color.White.copy(alpha = 0.07f)
+                    ),
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(12.dp))
+                        .clickable {
+                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            selectedFilter = index
+                        }
+                ) {
+                    Text(
+                        text = label,
+                        style = MaterialTheme.typography.labelMedium.copy(
+                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                            color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                        ),
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 7.dp)
+                    )
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
 
         if (isLoading) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
             }
         } else {
-            val filtered = installedApps.filter {
-                it.appName.contains(searchQuery, ignoreCase = true) ||
-                it.packageName.contains(searchQuery, ignoreCase = true)
+            val filtered = installedApps.filter { app ->
+                val matchesQuery = app.appName.contains(searchQuery, ignoreCase = true) ||
+                    app.packageName.contains(searchQuery, ignoreCase = true)
+                val isShielded = monitoredPackages.contains(app.packageName)
+                val matchesFilter = when (selectedFilter) {
+                    1 -> isShielded
+                    2 -> !isShielded
+                    else -> true
+                }
+                matchesQuery && matchesFilter
             }
 
             if (filtered.isEmpty()) {
@@ -681,14 +756,15 @@ fun AppsTab(
 
                     Surface(
                         shape = RoundedCornerShape(18.dp),
-                        color = MaterialTheme.colorScheme.surfaceContainer,
-                        border = androidx.compose.foundation.BorderStroke(
-                            1.dp,
-                            if (isChecked) {
-                                MaterialTheme.colorScheme.primary.copy(alpha = 0.35f)
-                            } else {
-                                Color.White.copy(alpha = 0.06f)
-                            }
+                        color = if (isChecked) {
+                            MaterialTheme.colorScheme.primary.copy(alpha = 0.06f)
+                        } else {
+                            MaterialTheme.colorScheme.surfaceContainer
+                        },
+                        contentColor = MaterialTheme.colorScheme.onSurface,
+                        border = zenGlassBorder(
+                            isHighlighted = isChecked,
+                            accentColor = MaterialTheme.colorScheme.primary
                         ),
                         modifier = Modifier
                             .fillMaxWidth()
@@ -970,19 +1046,20 @@ fun InterventionsTab(
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         val modes = listOf(
-                            Triple(RuleMode.SHUFFLE, "🎲 Smart Shuffle", "No repeats"),
-                            Triple(RuleMode.ROTATE, "🔁 In Sequence", "In turn"),
-                            Triple(RuleMode.RANDOM, "✨ Pure Random", "Random")
+                            Triple(RuleMode.SHUFFLE, Icons.Default.Shuffle, "Smart Shuffle" to "No repeats"),
+                            Triple(RuleMode.ROTATE, Icons.Default.Repeat, "In Sequence" to "In turn"),
+                            Triple(RuleMode.RANDOM, Icons.Default.AutoAwesome, "Pure Random" to "Random")
                         )
 
-                        modes.forEach { (mode, label, sub) ->
+                        modes.forEach { (mode, modeIcon, labels) ->
+                            val (label, sub) = labels
                             val isSelected = globalSettings.defaultRuleMode == mode
                             Surface(
                                 shape = RoundedCornerShape(14.dp),
                                 color = if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.14f) else Color.White.copy(alpha = 0.04f),
-                                border = BorderStroke(
-                                    1.dp,
-                                    if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.5f) else Color.White.copy(alpha = 0.06f)
+                                border = zenGlassBorder(
+                                    isHighlighted = isSelected,
+                                    accentColor = MaterialTheme.colorScheme.primary
                                 ),
                                 modifier = Modifier
                                     .weight(1f)
@@ -993,13 +1070,20 @@ fun InterventionsTab(
                                     }
                             ) {
                                 Column(
-                                    modifier = Modifier.padding(vertical = 10.dp, horizontal = 4.dp),
+                                    modifier = Modifier.padding(vertical = 10.dp, horizontal = 6.dp),
                                     horizontalAlignment = Alignment.CenterHorizontally
                                 ) {
+                                    Icon(
+                                        imageVector = modeIcon,
+                                        contentDescription = null,
+                                        tint = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Spacer(modifier = Modifier.height(4.dp))
                                     Text(
                                         text = label,
                                         fontWeight = FontWeight.Bold,
-                                        fontSize = 12.sp,
+                                        fontSize = 11.sp,
                                         color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
                                         maxLines = 1
                                     )
@@ -1416,6 +1500,14 @@ private fun checkAccessibilityPermission(context: Context): Boolean {
     } catch (_: Exception) {
         false
     }
+}
+
+private fun checkNotificationPermission(context: Context): Boolean {
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return true
+    return ContextCompat.checkSelfPermission(
+        context,
+        Manifest.permission.POST_NOTIFICATIONS
+    ) == PackageManager.PERMISSION_GRANTED
 }
 
 private fun saveMediaToInternalStorage(context: Context, sourceUri: Uri, prefix: String, extension: String): String? {

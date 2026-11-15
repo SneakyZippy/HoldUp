@@ -20,6 +20,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
@@ -40,7 +41,7 @@ fun AccentThemePickerCard(
     Surface(
         shape = RoundedCornerShape(20.dp),
         color = MaterialTheme.colorScheme.surfaceContainer,
-        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.08f)),
+        border = zenGlassBorder(),
         modifier = modifier.fillMaxWidth()
     ) {
         Column(modifier = Modifier.padding(20.dp)) {
@@ -111,6 +112,18 @@ fun AccentThemePickerCard(
                             Box(
                                 modifier = Modifier
                                     .size(36.dp)
+                                    .then(
+                                        if (isSelected) {
+                                            Modifier.shadow(
+                                                elevation = 10.dp,
+                                                shape = CircleShape,
+                                                ambientColor = preset.primary,
+                                                spotColor = preset.primary
+                                            )
+                                        } else {
+                                            Modifier
+                                        }
+                                    )
                                     .clip(CircleShape)
                                     .background(Brush.linearGradient(preset.gradientColors))
                                     .border(

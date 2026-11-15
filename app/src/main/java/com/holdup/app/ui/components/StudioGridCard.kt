@@ -2,6 +2,7 @@ package com.holdup.app.ui.components
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
@@ -10,6 +11,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
@@ -35,10 +37,7 @@ fun StudioGridCard(
     Surface(
         shape = RoundedCornerShape(20.dp),
         color = MaterialTheme.colorScheme.surfaceContainer,
-        border = BorderStroke(
-            1.dp,
-            if (isEnabled) badgeColor.copy(alpha = 0.35f) else Color.White.copy(alpha = 0.08f)
-        ),
+        border = zenGlassBorder(isHighlighted = isEnabled, accentColor = badgeColor),
         modifier = modifier
             .clip(RoundedCornerShape(20.dp))
             .clickable { onClick() }
@@ -90,7 +89,9 @@ fun StudioGridCard(
                     .fillMaxWidth()
                     .height(68.dp)
                     .clip(RoundedCornerShape(12.dp))
-                    .background(Color.Black.copy(alpha = 0.25f)),
+                    .background(Color.Black.copy(alpha = 0.28f))
+                    .border(1.dp, Color.White.copy(alpha = 0.06f), RoundedCornerShape(12.dp))
+                    .alpha(if (isEnabled) 1f else 0.55f),
                 contentAlignment = Alignment.Center
             ) {
                 visualContent()
@@ -150,10 +151,7 @@ fun StudioWideCard(
     Surface(
         shape = RoundedCornerShape(20.dp),
         color = MaterialTheme.colorScheme.surfaceContainer,
-        border = BorderStroke(
-            1.dp,
-            if (isEnabled) badgeColor.copy(alpha = 0.35f) else Color.White.copy(alpha = 0.08f)
-        ),
+        border = zenGlassBorder(isHighlighted = isEnabled, accentColor = badgeColor),
         modifier = modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(20.dp))
@@ -235,7 +233,9 @@ fun StudioWideCard(
                     .fillMaxWidth()
                     .height(60.dp)
                     .clip(RoundedCornerShape(12.dp))
-                    .background(Color.Black.copy(alpha = 0.25f)),
+                    .background(Color.Black.copy(alpha = 0.28f))
+                    .border(1.dp, Color.White.copy(alpha = 0.06f), RoundedCornerShape(12.dp))
+                    .alpha(if (isEnabled) 1f else 0.55f),
                 contentAlignment = Alignment.Center
             ) {
                 visualContent()

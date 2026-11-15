@@ -61,6 +61,7 @@ data class GlobalInterventionSettings(
     val lovedOneCaption: String = "Take a breath. Is this how you want to spend this moment?",
     val friendVideoUri: String? = null,
     val defaultSessionMinutes: Int = 5,
+    val dailyGraceMinutes: Int = 15,
     val enabledInterventions: List<InterventionType> = listOf(
         InterventionType.BREATHING,
         InterventionType.REFLECTION,

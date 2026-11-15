@@ -1,6 +1,8 @@
 package com.holdup.app.ui.dashboard
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -12,29 +14,66 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.holdup.app.data.model.DailyStats
+import com.holdup.app.ui.components.zenGlassBorder
+import com.holdup.app.ui.theme.LocalAccentPreset
 
 @Composable
 fun BentoStatsRow(
     todayStats: DailyStats,
+    onPointsClick: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     Row(
-        modifier = modifier.fillMaxWidth(),
+        modifier = modifier
+            .fillMaxWidth()
+            .height(IntrinsicSize.Max),
         horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         CleanFocusTile(
             todayStats = todayStats,
-            modifier = Modifier.weight(1f)
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxHeight()
         )
         MindfulPointsTile(
             todayStats = todayStats,
-            modifier = Modifier.weight(1f)
+            onClick = onPointsClick,
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxHeight()
         )
+    }
+}
+
+@Composable
+private fun ZenGradientProgressBar(
+    progress: Float,
+    colors: List<Color>,
+    modifier: Modifier = Modifier
+) {
+    val clamped = progress.coerceIn(0f, 1f)
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(6.dp)
+            .clip(RoundedCornerShape(3.dp))
+            .background(Color.White.copy(alpha = 0.08f))
+    ) {
+        if (clamped > 0f) {
+            Box(
+                modifier = Modifier
+                    .fillMaxHeight()
+                    .fillMaxWidth(clamped)
+                    .clip(RoundedCornerShape(3.dp))
+                    .background(Brush.horizontalGradient(colors))
+            )
+        }
     }
 }
 
@@ -43,10 +82,11 @@ private fun CleanFocusTile(
     todayStats: DailyStats,
     modifier: Modifier = Modifier
 ) {
+    val accent = LocalAccentPreset.current
     Surface(
         shape = RoundedCornerShape(20.dp),
         color = MaterialTheme.colorScheme.surfaceContainer,
-        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.08f)),
+        border = zenGlassBorder(),
         modifier = modifier.heightIn(min = 160.dp)
     ) {
         Column(
@@ -80,7 +120,11 @@ private fun CleanFocusTile(
                     border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.2f))
                 ) {
                     Text(
-                        text = "+${todayStats.cleanFocusHoursAwarded * 10} pts",
+                        text = if (todayStats.dailyGraceBudgetMinutes > 0) {
+                            "${todayStats.graceMinutesRemaining}m grace"
+                        } else {
+                            "Strict ${todayStats.gracePreset.multiplierLabel}"
+                        },
                         style = MaterialTheme.typography.labelSmall.copy(
                             fontWeight = FontWeight.Bold,
                             fontSize = 10.sp,
@@ -114,18 +158,13 @@ private fun CleanFocusTile(
             }
 
             Column {
-                LinearProgressIndicator(
-                    progress = { todayStats.focusHourProgress },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(5.dp)
-                        .clip(RoundedCornerShape(3.dp)),
-                    color = MaterialTheme.colorScheme.primary,
-                    trackColor = Color.White.copy(alpha = 0.08f)
+                ZenGradientProgressBar(
+                    progress = todayStats.focusHourProgress,
+                    colors = accent.gradientColors
                 )
-                Spacer(modifier = Modifier.height(4.dp))
+                Spacer(modifier = Modifier.height(6.dp))
                 Text(
-                    text = "${todayStats.minutesToNextFocusPoint}m to +10 pts",
+                    text = "${todayStats.minutesToNextFocusPoint}m to +${todayStats.gracePreset.hourlyPoints} pts",
                     style = MaterialTheme.typography.labelSmall.copy(
                         fontSize = 10.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -139,6 +178,7 @@ private fun CleanFocusTile(
 @Composable
 private fun MindfulPointsTile(
     todayStats: DailyStats,
+    onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val prevTierTarget = when (todayStats.currentLevelNumber) {
@@ -153,11 +193,15 @@ private fun MindfulPointsTile(
     val currentProgress = ((todayStats.lifetimePoints - prevTierTarget).toFloat() / targetDelta.toFloat())
         .coerceIn(0f, 1f)
 
+    val accent = LocalAccentPreset.current
     Surface(
         shape = RoundedCornerShape(20.dp),
         color = MaterialTheme.colorScheme.surfaceContainer,
-        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.08f)),
-        modifier = modifier.heightIn(min = 160.dp)
+        border = zenGlassBorder(),
+        modifier = modifier
+            .heightIn(min = 160.dp)
+            .clip(RoundedCornerShape(20.dp))
+            .clickable { onClick() }
     ) {
         Column(
             modifier = Modifier.padding(14.dp),
@@ -190,7 +234,11 @@ private fun MindfulPointsTile(
                     border = BorderStroke(1.dp, MaterialTheme.colorScheme.secondary.copy(alpha = 0.2f))
                 ) {
                     Text(
-                        text = "+${todayStats.pointsEarnedToday} today",
+                        text = if (todayStats.currentStreakDays > 0) {
+                            "${todayStats.currentStreakDays}d streak"
+                        } else {
+                            "+${todayStats.pointsEarnedToday} today"
+                        },
                         style = MaterialTheme.typography.labelSmall.copy(
                             fontWeight = FontWeight.Bold,
                             fontSize = 10.sp,
@@ -222,16 +270,14 @@ private fun MindfulPointsTile(
             }
 
             Column {
-                LinearProgressIndicator(
-                    progress = { currentProgress },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(5.dp)
-                        .clip(RoundedCornerShape(3.dp)),
-                    color = MaterialTheme.colorScheme.secondary,
-                    trackColor = Color.White.copy(alpha = 0.08f)
+                ZenGradientProgressBar(
+                    progress = currentProgress,
+                    colors = listOf(
+                        MaterialTheme.colorScheme.secondary,
+                        MaterialTheme.colorScheme.secondary.copy(alpha = 0.7f)
+                    )
                 )
-                Spacer(modifier = Modifier.height(4.dp))
+                Spacer(modifier = Modifier.height(6.dp))
                 val remaining = (todayStats.nextLevelTarget - todayStats.lifetimePoints).coerceAtLeast(0)
                 Text(
                     text = if (remaining > 0) "$remaining to Tier ${todayStats.currentLevelNumber + 1}" else "Max tier reached!",

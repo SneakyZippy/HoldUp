@@ -9,13 +9,17 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.holdup.app.data.model.DailyStats
+import com.holdup.app.ui.components.PointsBreakdownBottomSheet
 
 @Composable
 fun DashboardTab(
@@ -28,9 +32,11 @@ fun DashboardTab(
     isUsageAccessGranted: Boolean,
     onOpenAccessibilitySettings: () -> Unit,
     onOpenUsageSettings: () -> Unit,
-    onOpenTour: () -> Unit
+    onOpenTour: () -> Unit,
+    onBuyStreakFreeze: () -> Unit = {}
 ) {
     val context = LocalContext.current
+    var showPointsSheet by remember { mutableStateOf(false) }
 
     val installedShieldedPackages = remember(monitoredPackages) {
         val pm = context.packageManager
@@ -78,7 +84,10 @@ fun DashboardTab(
         }
 
         item {
-            BentoStatsRow(todayStats = todayStats)
+            BentoStatsRow(
+                todayStats = todayStats,
+                onPointsClick = { showPointsSheet = true }
+            )
         }
 
         item {
@@ -92,6 +101,14 @@ fun DashboardTab(
         item {
             Spacer(modifier = Modifier.height(16.dp))
         }
+    }
+
+    if (showPointsSheet) {
+        PointsBreakdownBottomSheet(
+            todayStats = todayStats,
+            onBuyStreakFreeze = onBuyStreakFreeze,
+            onDismiss = { showPointsSheet = false }
+        )
     }
 }
 
