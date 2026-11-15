@@ -801,13 +801,15 @@ fun DecisionFooter(
                             contentAlignment = Alignment.Center,
                             modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp)
                         ) {
-                            val canUseGrace = graceMinutesRemaining > 0 && !relapseState.isEscalated && !isSoftNudge
+                            val canUseGrace = graceMinutesRemaining > 0 && !relapseState.isEscalated
                             Text(
                                 text = when {
                                     relapseState.isEscalated && appName.isNotBlank() -> "Open $appName mindfully (-5 pts)"
                                     relapseState.isEscalated -> "Continue mindfully (-5 pts)"
+                                    canUseGrace && isSoftNudge -> "Use Grace to continue (${graceMinutesRemaining}m left)"
                                     canUseGrace && appName.isNotBlank() -> "Use Grace on $appName (${graceMinutesRemaining}m left)"
                                     canUseGrace -> "Use Grace (${graceMinutesRemaining}m left)"
+                                    isSoftNudge -> "Continue (resets Clean Focus)"
                                     appName.isNotBlank() -> "Open $appName (resets Clean Focus)"
                                     else -> "Continue (resets Clean Focus)"
                                 },
@@ -835,21 +837,19 @@ fun DecisionFooter(
 
                     Spacer(modifier = Modifier.height(4.dp))
 
-                    val willUseGrace = graceMinutesRemaining > 0 && selectedMinutes <= graceMinutesRemaining && !relapseState.isEscalated && !isSoftNudge
+                    val willUseGrace = graceMinutesRemaining > 0 && selectedMinutes <= graceMinutesRemaining && !relapseState.isEscalated
                     Text(
                         text = when {
                             relapseState.isEscalated -> "Relapse session: -5 mindful points will be deducted"
                             willUseGrace -> "Uses ${selectedMinutes}m of ${graceMinutesRemaining}m Daily Grace • Streak stays safe"
-                            graceMinutesRemaining > 0 && !isSoftNudge -> "Exceeds ${graceMinutesRemaining}m Grace • Resets Clean Focus"
-                            !isSoftNudge -> "No Grace left today • Resets Clean Focus"
-                            else -> "A gentle nudge will sound when time is up"
+                            graceMinutesRemaining > 0 -> "Exceeds ${graceMinutesRemaining}m Grace • Resets Clean Focus"
+                            else -> "No Grace left today • Resets Clean Focus"
                         },
                         style = MaterialTheme.typography.bodyMedium.copy(
                             color = when {
                                 relapseState.isEscalated -> Color(0xFFFFB74D)
                                 willUseGrace -> MaterialTheme.colorScheme.primary
-                                !isSoftNudge -> ZenAmber
-                                else -> MaterialTheme.colorScheme.onSurfaceVariant
+                                else -> ZenAmber
                             }
                         ),
                         textAlign = androidx.compose.ui.text.style.TextAlign.Center
@@ -955,7 +955,7 @@ fun DecisionFooter(
                     Spacer(modifier = Modifier.height(18.dp))
 
                     // Enter Button
-                    val useGraceOnEnter = graceMinutesRemaining > 0 && selectedMinutes <= graceMinutesRemaining && !relapseState.isEscalated && !isSoftNudge
+                    val useGraceOnEnter = graceMinutesRemaining > 0 && selectedMinutes <= graceMinutesRemaining && !relapseState.isEscalated
                     Button(
                         onClick = {
                             haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
@@ -977,9 +977,10 @@ fun DecisionFooter(
                     ) {
                         Text(
                             text = when {
-                                isSoftNudge -> "Continue for $selectedMinutes min"
                                 relapseState.isEscalated -> "Enter for $selectedMinutes min (-5 pts)"
+                                useGraceOnEnter && isSoftNudge -> "Use Grace ($selectedMinutes min more)"
                                 useGraceOnEnter -> "Use Grace ($selectedMinutes min)"
+                                isSoftNudge -> "Continue for $selectedMinutes min"
                                 else -> "Enter for $selectedMinutes min"
                             },
                             style = MaterialTheme.typography.titleMedium.copy(
