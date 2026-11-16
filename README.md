@@ -23,24 +23,25 @@ HoldUp intercepts doomscroll apps (Instagram, TikTok, YouTube, Reddit, etc.) wit
 
 When you open a monitored app, HoldUp pauses you with a mindful intervention:
 
-- **Sacred Lotus Breathwork**: Guided 3-phase breath cycle (Inhale, Hold, Exhale) with sacred geometry bloom and tactile haptics.
+- **Sacred Lotus Breathwork**: Guided 3-phase breath cycle (Inhale, Hold, Exhale) with sacred geometry bloom, breathing halo, and tactile haptics.
 - **Mindful Reflections**: Curated grounding prompts and reality checks (with hide/downvote and custom quotes).
 - **Personal Anchor**: Photo of a loved one or video message from a friend.
 - **Healthy Swaps**: Quick ideas of rewarding things to do instead.
 - **Mindful Accent Themes**: 5 curated OLED atmospheres (Zen Sage, Mindful Iris, Glacier Blue, Golden Sunset, Sakura Rose).
+- **Zen Spirit Sanctuary (Zoo)**: Adopt and evolve 6 procedural spirit companions (*Moss Turtle*, *Ember Fox*, *Cloud Owl*, *Lotus Axolotl*, *Bamboo Panda*, *Cosmic Koi*) across 4 stages (*Spirit Egg* → *Hatchling* → *Juvenile* → *Awakened*) using spendable mindful points.
 
-Choose to **Walk Away** (+10 pts) to log a mindful win and return home, choose a **Healthy Swap** (+20 pts) to redirect your energy, or open the app mindfully for a set session (**5, 10, or 15 min**). When your time expires, a soft nudge brings you back to reality.
+Choose to **Walk Away** (+10 pts, up to 3×/day) to log a mindful win and return home, choose a **Healthy Swap** to redirect your energy, or open the app mindfully for a custom session (**1–60 min**, quick presets **2, 5, 10, 15, 30 min**). When your time expires, a soft nudge brings you back to reality.
 
-## Minimalist Bento Dashboard & Focus Tiers
+## Minimalist Bento Dashboard, Daily Grace & Focus Tiers
 
 Track your journey without visual clutter:
 - **Mindful Intention Dial**: Instant visual feedback on today's conscious win rate and estimated minutes saved.
-- **Clean Focus Hours**: Earn **+10 points automatically** for every consecutive hour you don't touch any shielded app during daytime (08:00–22:00).
-- **Daily Focus Bonus**: Earn a **Pure Zen bonus (+50 pts)** for zero attempts all day, or a **Mindful Recovery bonus (+25 pts)** if you had 1–2 attempts and walked away.
-- **Walk Away**: **+10 points** for mindfully stepping back when an intervention triggers.
-- **Healthy Swap**: **+20 points** for consciously redirecting your attention to an enriching alternative.
-- **Relapse Resistance**: Re-opening a shielded app within 15 minutes progressively increases the pause duration (10s → 20s) and proceeding deducts **5 points**, while walking away always preserves your hard-earned score.
-- Level up through focus tiers (*Mindful Novice* → *Focus Builder* → *Focus Pro* → *Habit Champion* → *Zen Master*) and track your progress right from the dashboard.
+- **Daily Grace Budget & Streaks**: Choose a daily grace budget (`Off (0m)` up to `1h`) with scaled multipliers (`0.4×`–`2.0×`), build consecutive clean days, and protect streaks with **Streak Freezes** (100 pts, max 2).
+- **Clean Focus Hours**: Earn points automatically for every continuous hour without an over-budget interruption (e.g., **+10 pts/hr** on the balanced 15m budget, up to **+20 pts/hr** in Strict mode).
+- **Daily Focus Bonus**: Earn a **Pure Zen** or **Within Grace** bonus at day rollover when staying within your daily grace budget.
+- **Walk Away**: **+10 points** for mindfully stepping back when an intervention triggers (capped at 3 rewards/day).
+- **Duration-Scaled Penalties & Early-Exit Refunds**: Going over your Daily Grace budget deducts points proportional to your planned session duration (plus relapse friction if reopening within 15 minutes). Leaving early automatically refunds unused grace minutes and penalty points.
+- Level up through focus tiers (*Mindful Novice* → *Focus Builder* → *Focus Pro* → *Habit Champion* → *Zen Master*) and raise your Zen Spirit companion right from the dashboard.
 
 ## Download & Testing
 
