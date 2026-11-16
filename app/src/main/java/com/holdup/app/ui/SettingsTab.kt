@@ -1,5 +1,6 @@
 package com.holdup.app.ui
 
+import android.content.pm.ApplicationInfo
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -15,12 +16,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.holdup.app.data.model.GraceBudgetPreset
 import com.holdup.app.ui.components.AccentThemePickerCard
+import com.holdup.app.ui.components.DebugToolsCard
 import com.holdup.app.ui.components.PinSetupDialog
 import com.holdup.app.ui.components.PinVerifyDialog
 import com.holdup.app.ui.components.zenGlassBorder
@@ -45,9 +48,14 @@ fun SettingsTab(
     dailyGraceMinutes: Int = 15,
     onSetDailyGraceMinutes: (Int) -> Unit = {},
     currentAccentPreset: AccentPreset = AccentPreset.DEFAULT,
-    onSelectAccentPreset: (AccentPreset) -> Unit = {}
+    onSelectAccentPreset: (AccentPreset) -> Unit = {},
+    onGrantDebugPoints: () -> Unit = {}
 ) {
+    val context = LocalContext.current
     val haptic = LocalHapticFeedback.current
+    val isDebugBuild = remember(context) {
+        (context.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0
+    }
 
     var showPinSetupDialog by remember { mutableStateOf(false) }
     var showPinVerifyDialog by remember { mutableStateOf(false) }
@@ -698,6 +706,17 @@ fun SettingsTab(
                         textAlign = androidx.compose.ui.text.style.TextAlign.Center
                     )
                 }
+            }
+        }
+
+        if (isDebugBuild) {
+            item {
+                SettingsSectionLabel("DEVELOPER DEBUG")
+                Spacer(modifier = Modifier.height(8.dp))
+                DebugToolsCard(onGrantInfinitePoints = {
+                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                    onGrantDebugPoints()
+                })
             }
         }
 

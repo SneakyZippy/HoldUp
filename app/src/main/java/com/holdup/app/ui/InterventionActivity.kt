@@ -1,32 +1,25 @@
 package com.holdup.app.ui
 
 import android.content.Context
-import android.media.AudioAttributes
-import android.media.AudioFormat
-import android.media.AudioTrack
-import android.os.Build
+import android.content.Intent
 import android.os.Bundle
-import android.os.VibrationEffect
-import android.os.Vibrator
-import android.os.VibratorManager
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material.icons.filled.Visibility
-import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -36,19 +29,15 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.holdup.app.HoldUpApp
 import com.holdup.app.data.model.*
 import com.holdup.app.service.HoldUpAccessibilityService
 import com.holdup.app.service.SessionMonitorService
 import com.holdup.app.ui.components.*
 import com.holdup.app.ui.theme.*
-import android.content.Intent
-import android.widget.Toast
-import androidx.compose.foundation.shape.CircleShape
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
-import kotlin.random.Random
 
 class InterventionActivity : ComponentActivity() {
 
@@ -134,30 +123,39 @@ class InterventionActivity : ComponentActivity() {
                         }
                         finishAndRemoveTask()
                     },
-                    onOpenSession = { minutes, isPenalized, useGrace ->
+                    onOpenSession = { minutes, cost ->
                         isInterventionActive = false
                         activeTargetPackage = null
                         if (targetPackage.isNotBlank()) {
                             HoldUpAccessibilityService.suppressInterception(targetPackage, 2500L)
                         }
                         if (isTestMode) {
-                            val graceNote = if (useGrace) " (Grace)" else ""
-                            val msg = "Test complete: ${minutes}m session$graceNote" + if (isPenalized) " (-5 pts penalty)" else ""
+                            val graceNote = if (cost.usesGrace) " (${cost.graceMinutesUsed}m Grace)" else ""
+                            val penaltyNote = if (cost.totalPenaltyPoints > 0) " (-${cost.totalPenaltyPoints} pts)" else ""
+                            val msg = "Test complete: ${minutes}m session$graceNote$penaltyNote"
                             Toast.makeText(this@InterventionActivity, msg, Toast.LENGTH_SHORT).show()
                             finishAndRemoveTask()
                             return@InterventionScreen
                         }
                         val app = application as HoldUpApp
                         val appContext = applicationContext
+                        val relapsePenalty = if (cost.isEscalated) cost.baseRelapsePenaltyPoints else 0
                         app.applicationScope.launch {
-                            if (isPenalized) {
-                                app.preferencesManager.recordProceedPenalty(5)
+                            val recordedCost = app.preferencesManager.recordProceedSession(
+                                packageName = targetPackage,
+                                durationMinutes = minutes,
+                                relapsePenaltyPoints = relapsePenalty
+                            )
+                            app.preferencesManager.saveLastChosenDuration(targetPackage, minutes)
+                            if (recordedCost.totalPenaltyPoints > 0) {
                                 kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
-                                    Toast.makeText(appContext, "⚠️ 5 mindful points deducted for relapse", Toast.LENGTH_SHORT).show()
+                                    Toast.makeText(
+                                        appContext,
+                                        "⚠️ ${recordedCost.totalPenaltyPoints} mindful points deducted",
+                                        Toast.LENGTH_SHORT
+                                    ).show()
                                 }
                             }
-                            app.preferencesManager.recordProceedSession(targetPackage, minutes, useGrace = useGrace)
-                            app.preferencesManager.saveLastChosenDuration(targetPackage, minutes)
                         }
                         SessionMonitorService.startSession(this@InterventionActivity, targetPackage, minutes)
 
@@ -205,10 +203,12 @@ fun InterventionScreen(
     isTestMode: Boolean = false,
     testType: InterventionType? = null,
     onWalkAway: (Boolean) -> Unit,
-    onOpenSession: (Int, Boolean, Boolean) -> Unit
+    onOpenSession: (Int, SessionCostBreakdown) -> Unit
 ) {
     val coroutineScope = rememberCoroutineScope()
     val prefs = HoldUpApp.instance.preferencesManager
+    val zooState by prefs.zooState.collectAsStateWithLifecycle(initialValue = ZooState())
+    val todayStats by prefs.todayStats.collectAsStateWithLifecycle(initialValue = DailyStats())
 
     var isConfigLoaded by remember { mutableStateOf(false) }
     var activeInterventionType by remember { mutableStateOf(InterventionType.BREATHING) }
@@ -574,6 +574,12 @@ fun InterventionScreen(
                             }
                         }
                     }
+                    InterventionPetBanner(
+                        activePet = zooState.activePet,
+                        todayStats = todayStats,
+                        graceMinutesRemaining = graceMinutesRemaining,
+                        isEscalated = relapseState.isEscalated
+                    )
                     DecisionFooter(
                         isSoftNudge = isSoftNudge,
                         targetPackageName = targetPackageName,
@@ -582,571 +588,17 @@ fun InterventionScreen(
                         relapseState = relapseState,
                         selectedAlternative = selectedAlternative,
                         onWalkAway = { onWalkAway(selectedAlternative != null) },
-                        onOpenSession = onOpenSession
+                        onOpenSession = { minutes ->
+                            val cost = SessionPenaltyCalculator.calculateCost(
+                                plannedMinutes = minutes,
+                                graceMinutesRemaining = graceMinutesRemaining,
+                                relapseState = relapseState
+                            )
+                            onOpenSession(minutes, cost)
+                        }
                     )
                 }
             }
         }
     }
-}
-
-@Composable
-fun SoftNudgeHeader(targetPackageName: String) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 24.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Surface(
-            shape = RoundedCornerShape(30.dp),
-            color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.5f),
-            modifier = Modifier.padding(bottom = 6.dp)
-        ) {
-            Text(
-                text = "TIME'S UP",
-                style = MaterialTheme.typography.labelSmall.copy(
-                    letterSpacing = 2.5.sp,
-                    color = MaterialTheme.colorScheme.error,
-                    fontWeight = FontWeight.Bold
-                ),
-                modifier = Modifier.padding(horizontal = 14.dp, vertical = 5.dp)
-            )
-        }
-        Spacer(modifier = Modifier.height(4.dp))
-        Text(
-            text = "Session Complete",
-            style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.SemiBold)
-        )
-    }
-}
-
-@Composable
-fun SoftNudgeBody() {
-    Column(
-        modifier = Modifier.padding(horizontal = 32.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Text(
-            text = "⏳",
-            fontSize = 54.sp
-        )
-        Spacer(modifier = Modifier.height(16.dp))
-        Text(
-            text = "Your planned session has ended.",
-            style = MaterialTheme.typography.titleLarge
-        )
-        Spacer(modifier = Modifier.height(8.dp))
-        Text(
-            text = "Take this opportunity to close the app and return to the real world.",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-    }
-}
-
-enum class DecisionStep {
-    ASK_ENTER,
-    CHOOSE_DURATION
-}
-
-@Composable
-fun DecisionFooter(
-    isSoftNudge: Boolean,
-    targetPackageName: String,
-    maxSessionMinutes: Int = 15,
-    graceMinutesRemaining: Int = 0,
-    relapseState: RelapseState = RelapseState(),
-    selectedAlternative: AlternativeActivity?,
-    onWalkAway: () -> Unit,
-    onOpenSession: (Int, Boolean, Boolean) -> Unit
-) {
-    val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
-    val context = androidx.compose.ui.platform.LocalContext.current
-
-    val appName = remember(targetPackageName) {
-        try {
-            val pm = context.packageManager
-            val info = pm.getApplicationInfo(targetPackageName, 0)
-            pm.getApplicationLabel(info).toString()
-        } catch (_: Exception) {
-            ""
-        }
-    }
-
-    var currentStep by remember { mutableStateOf(DecisionStep.ASK_ENTER) }
-    val defaultMins = if (maxSessionMinutes in 1..60) maxSessionMinutes else 10
-    val initialMins = if (graceMinutesRemaining > 0 && !relapseState.isEscalated) {
-        minOf(defaultMins, graceMinutesRemaining).coerceAtLeast(1)
-    } else {
-        defaultMins
-    }
-    var selectedMinutes by remember(initialMins) { mutableIntStateOf(initialMins) }
-    var sliderValue by remember(initialMins) { mutableFloatStateOf(initialMins.toFloat()) }
-
-    BackHandler(enabled = true) {
-        if (currentStep == DecisionStep.CHOOSE_DURATION) {
-            currentStep = DecisionStep.ASK_ENTER
-        } else {
-            onWalkAway()
-        }
-    }
-
-    AnimatedContent(
-        targetState = currentStep,
-        transitionSpec = {
-            if (targetState == DecisionStep.CHOOSE_DURATION) {
-                (slideInHorizontally { width -> width } + fadeIn()).togetherWith(
-                    slideOutHorizontally { width -> -width } + fadeOut()
-                )
-            } else {
-                (slideInHorizontally { width -> -width } + fadeIn()).togetherWith(
-                    slideOutHorizontally { width -> width } + fadeOut()
-                )
-            }
-        },
-        label = "DecisionStepAnimation"
-    ) { step ->
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 20.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            when (step) {
-                DecisionStep.ASK_ENTER -> {
-                    Text(
-                        text = if (isSoftNudge) "Ready to step back?" else "Still want to enter?",
-                        style = MaterialTheme.typography.titleLarge.copy(
-                            fontWeight = FontWeight.SemiBold,
-                            fontSize = 20.sp,
-                            letterSpacing = (-0.2).sp,
-                            color = MaterialTheme.colorScheme.onSurface
-                        ),
-                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
-                    )
-
-                    Spacer(modifier = Modifier.height(4.dp))
-
-                    Text(
-                        text = if (isSoftNudge) {
-                            "Your planned session has ended. Step away for clarity."
-                        } else if (selectedAlternative != null) {
-                            "Selected: ${selectedAlternative.title}"
-                        } else {
-                            "Give yourself the gift of intentional presence."
-                        },
-                        style = MaterialTheme.typography.bodyMedium.copy(
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        ),
-                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
-                    )
-
-                    Spacer(modifier = Modifier.height(20.dp))
-
-                    // Primary Mindful Choice: Walk away (No)
-                    Button(
-                        onClick = {
-                            haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
-                            onWalkAway()
-                        },
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = MaterialTheme.colorScheme.primary,
-                            contentColor = MaterialTheme.colorScheme.onPrimary
-                        ),
-                        shape = RoundedCornerShape(20.dp),
-                        contentPadding = PaddingValues(horizontal = 20.dp, vertical = 12.dp),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .defaultMinSize(minHeight = 54.dp)
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.Center
-                        ) {
-                            Icon(imageVector = Icons.Default.Check, contentDescription = null, modifier = Modifier.size(18.dp))
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(
-                                text = if (selectedAlternative != null) {
-                                    selectedAlternative.title
-                                } else {
-                                    "Walk Away"
-                                },
-                                style = MaterialTheme.typography.titleMedium.copy(
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 15.sp
-                                ),
-                                textAlign = androidx.compose.ui.text.style.TextAlign.Center
-                            )
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(10.dp))
-
-                    // Secondary Choice: Yes -> advances to slider
-                    Surface(
-                        shape = RoundedCornerShape(20.dp),
-                        color = Color.White.copy(alpha = 0.04f),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.08f)),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .defaultMinSize(minHeight = 50.dp)
-                            .clip(RoundedCornerShape(20.dp))
-                            .clickable {
-                                haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
-                                currentStep = DecisionStep.CHOOSE_DURATION
-                            }
-                    ) {
-                        Box(
-                            contentAlignment = Alignment.Center,
-                            modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp)
-                        ) {
-                            val canUseGrace = graceMinutesRemaining > 0 && !relapseState.isEscalated
-                            Text(
-                                text = when {
-                                    relapseState.isEscalated && appName.isNotBlank() -> "Open $appName mindfully (-5 pts)"
-                                    relapseState.isEscalated -> "Continue mindfully (-5 pts)"
-                                    canUseGrace && isSoftNudge -> "Use Grace to continue (${graceMinutesRemaining}m left)"
-                                    canUseGrace && appName.isNotBlank() -> "Use Grace on $appName (${graceMinutesRemaining}m left)"
-                                    canUseGrace -> "Use Grace (${graceMinutesRemaining}m left)"
-                                    isSoftNudge -> "Continue (resets Clean Focus)"
-                                    appName.isNotBlank() -> "Open $appName (resets Clean Focus)"
-                                    else -> "Continue (resets Clean Focus)"
-                                },
-                                style = MaterialTheme.typography.bodyMedium.copy(
-                                    fontWeight = if (relapseState.isEscalated) FontWeight.SemiBold else FontWeight.Medium,
-                                    color = if (relapseState.isEscalated) Color(0xFFFFB74D) else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.85f)
-                                ),
-                                textAlign = androidx.compose.ui.text.style.TextAlign.Center
-                            )
-                        }
-                    }
-                }
-
-                DecisionStep.CHOOSE_DURATION -> {
-                    Text(
-                        text = "Set Intended Time",
-                        style = MaterialTheme.typography.titleLarge.copy(
-                            fontWeight = FontWeight.SemiBold,
-                            fontSize = 20.sp,
-                            letterSpacing = (-0.2).sp,
-                            color = MaterialTheme.colorScheme.onSurface
-                        ),
-                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
-                    )
-
-                    Spacer(modifier = Modifier.height(4.dp))
-
-                    val willUseGrace = graceMinutesRemaining > 0 && selectedMinutes <= graceMinutesRemaining && !relapseState.isEscalated
-                    Text(
-                        text = when {
-                            relapseState.isEscalated -> "Relapse session: -5 mindful points will be deducted"
-                            willUseGrace -> "Uses ${selectedMinutes}m of ${graceMinutesRemaining}m Daily Grace • Streak stays safe"
-                            graceMinutesRemaining > 0 -> "Exceeds ${graceMinutesRemaining}m Grace • Resets Clean Focus"
-                            else -> "No Grace left today • Resets Clean Focus"
-                        },
-                        style = MaterialTheme.typography.bodyMedium.copy(
-                            color = when {
-                                relapseState.isEscalated -> Color(0xFFFFB74D)
-                                willUseGrace -> MaterialTheme.colorScheme.primary
-                                else -> ZenAmber
-                            }
-                        ),
-                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
-                    )
-
-                    Spacer(modifier = Modifier.height(16.dp))
-
-                    // Readout badge
-                    Surface(
-                        shape = RoundedCornerShape(18.dp),
-                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.25f))
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 20.dp, vertical = 6.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.Center
-                        ) {
-                            Text(
-                                text = "$selectedMinutes",
-                                style = MaterialTheme.typography.headlineMedium.copy(
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.primary
-                                )
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(
-                                text = if (selectedMinutes == 1) "minute session" else "minutes session",
-                                style = MaterialTheme.typography.bodyMedium.copy(
-                                    fontWeight = FontWeight.Medium,
-                                    color = MaterialTheme.colorScheme.primary
-                                )
-                            )
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(14.dp))
-
-                    // Slider
-                    Slider(
-                        value = sliderValue,
-                        onValueChange = { newValue ->
-                            val rounded = kotlin.math.round(newValue).toInt().coerceIn(1, 60)
-                            if (rounded != selectedMinutes) {
-                                haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
-                                selectedMinutes = rounded
-                            }
-                            sliderValue = newValue
-                        },
-                        valueRange = 1f..60f,
-                        steps = 58,
-                        colors = SliderDefaults.colors(
-                            thumbColor = MaterialTheme.colorScheme.primary,
-                            activeTrackColor = MaterialTheme.colorScheme.primary,
-                            inactiveTrackColor = Color.White.copy(alpha = 0.08f)
-                        ),
-                        modifier = Modifier.fillMaxWidth()
-                    )
-
-                    // Presets
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        listOf(2, 5, 10, 15, 30).forEach { preset ->
-                            val isSelected = selectedMinutes == preset
-                            Surface(
-                                shape = RoundedCornerShape(12.dp),
-                                color = if (isSelected) {
-                                    MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
-                                } else {
-                                    Color.White.copy(alpha = 0.04f)
-                                },
-                                border = androidx.compose.foundation.BorderStroke(
-                                    1.dp,
-                                    if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.5f) else Color.White.copy(alpha = 0.06f)
-                                ),
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .clip(RoundedCornerShape(12.dp))
-                                    .clickable {
-                                        haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
-                                        selectedMinutes = preset
-                                        sliderValue = preset.toFloat()
-                                    }
-                            ) {
-                                Box(
-                                    modifier = Modifier.padding(vertical = 8.dp),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Text(
-                                        text = "${preset}m",
-                                        style = MaterialTheme.typography.labelMedium.copy(
-                                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                                            color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
-                                    )
-                                }
-                            }
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(18.dp))
-
-                    // Enter Button
-                    val useGraceOnEnter = graceMinutesRemaining > 0 && selectedMinutes <= graceMinutesRemaining && !relapseState.isEscalated
-                    Button(
-                        onClick = {
-                            haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
-                            onOpenSession(selectedMinutes, relapseState.isEscalated, useGraceOnEnter)
-                        },
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = if (relapseState.isEscalated) {
-                                Color(0xFFD84315)
-                            } else {
-                                MaterialTheme.colorScheme.primary
-                            },
-                            contentColor = MaterialTheme.colorScheme.onPrimary
-                        ),
-                        shape = RoundedCornerShape(20.dp),
-                        contentPadding = PaddingValues(horizontal = 20.dp, vertical = 12.dp),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .defaultMinSize(minHeight = 54.dp)
-                    ) {
-                        Text(
-                            text = when {
-                                relapseState.isEscalated -> "Enter for $selectedMinutes min (-5 pts)"
-                                useGraceOnEnter && isSoftNudge -> "Use Grace ($selectedMinutes min more)"
-                                useGraceOnEnter -> "Use Grace ($selectedMinutes min)"
-                                isSoftNudge -> "Continue for $selectedMinutes min"
-                                else -> "Enter for $selectedMinutes min"
-                            },
-                            style = MaterialTheme.typography.titleMedium.copy(
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 15.sp
-                            ),
-                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.height(8.dp))
-
-                    // Back / Walk away
-                    TextButton(
-                        onClick = {
-                            haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
-                            currentStep = DecisionStep.ASK_ENTER
-                        }
-                    ) {
-                        Text(
-                            text = "← Changed my mind (Walk away)",
-                            style = MaterialTheme.typography.bodyMedium.copy(
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun RelapseFrictionBanner(
-    state: RelapseState,
-    remainingSeconds: Int
-) {
-    val isSevere = state.tier >= 3
-    val containerColor = if (isSevere) {
-        MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.35f)
-    } else {
-        Color(0xFFFFA726).copy(alpha = 0.18f)
-    }
-    val contentColor = if (isSevere) {
-        MaterialTheme.colorScheme.error
-    } else {
-        Color(0xFFFFB74D)
-    }
-    val borderColor = contentColor.copy(alpha = 0.4f)
-
-    Surface(
-        shape = RoundedCornerShape(16.dp),
-        color = containerColor,
-        border = androidx.compose.foundation.BorderStroke(1.dp, borderColor),
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(36.dp)
-                    .clip(CircleShape)
-                    .background(contentColor.copy(alpha = 0.15f)),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = if (remainingSeconds > 0) Icons.Default.Timer else Icons.Default.Warning,
-                    contentDescription = null,
-                    tint = contentColor,
-                    modifier = Modifier.size(20.dp)
-                )
-            }
-            Spacer(modifier = Modifier.width(12.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = if (isSevere) {
-                        "⚠️ Relapse Alert • Open #${state.recentAttemptsCount} in 15m"
-                    } else {
-                        "⚠️ Relapse Friction • Open #${state.recentAttemptsCount} in 15m"
-                    },
-                    style = MaterialTheme.typography.labelLarge.copy(
-                        fontWeight = FontWeight.Bold,
-                        color = contentColor
-                    )
-                )
-                Text(
-                    text = if (remainingSeconds > 0) {
-                        "Mindful pause active: ${remainingSeconds}s remaining"
-                    } else {
-                        "Proceeding will deduct 5 mindful points"
-                    },
-                    style = MaterialTheme.typography.bodySmall.copy(
-                        color = contentColor.copy(alpha = 0.9f)
-                    )
-                )
-            }
-        }
-    }
-}
-
-/**
- * Triggers a serene mindful alert (calm harmonic chime + gentle rhythmic vibration)
- * to peacefully signal when the chosen session duration has ended.
- */
-private fun triggerMindfulSessionCompleteAlert(context: Context) {
-    // 1. Soothing haptic vibration pattern
-    try {
-        val vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            val vm = context.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as? VibratorManager
-            vm?.defaultVibrator
-        } else {
-            @Suppress("DEPRECATION")
-            context.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
-        }
-
-        vibrator?.let {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                // Gentle calm double-pulse pattern
-                val timings = longArrayOf(0, 180, 120, 240)
-                val amplitudes = intArrayOf(0, 140, 0, 190)
-                it.vibrate(VibrationEffect.createWaveform(timings, amplitudes, -1))
-            } else {
-                @Suppress("DEPRECATION")
-                it.vibrate(longArrayOf(0, 180, 120, 240), -1)
-            }
-        }
-    } catch (_: Exception) {}
-
-    // 2. Serene mindful singing bowl audio chime (528 Hz harmonic chime)
-    try {
-        val sampleRate = 44100
-        val durationSeconds = 1.2
-        val numSamples = (durationSeconds * sampleRate).toInt()
-        val buffer = ShortArray(numSamples)
-        val baseFreq = 528.0
-
-        for (i in 0 until numSamples) {
-            val t = i.toDouble() / sampleRate
-            val envelope = kotlin.math.exp(-3.2 * t)
-            val sample = (kotlin.math.sin(2.0 * Math.PI * baseFreq * t) +
-                    0.35 * kotlin.math.sin(2.0 * Math.PI * (baseFreq * 2.0) * t) +
-                    0.15 * kotlin.math.sin(2.0 * Math.PI * (baseFreq * 3.0) * t)) * envelope
-            buffer[i] = (sample * 16000).toInt().coerceIn(Short.MIN_VALUE.toInt(), Short.MAX_VALUE.toInt()).toShort()
-        }
-
-        val audioTrack = AudioTrack.Builder()
-            .setAudioAttributes(
-                AudioAttributes.Builder()
-                    .setUsage(AudioAttributes.USAGE_ASSISTANCE_SONIFICATION)
-                    .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
-                    .build()
-            )
-            .setAudioFormat(
-                AudioFormat.Builder()
-                    .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
-                    .setSampleRate(sampleRate)
-                    .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
-                    .build()
-            )
-            .setBufferSizeInBytes(buffer.size * 2)
-            .setTransferMode(AudioTrack.MODE_STATIC)
-            .build()
-
-        audioTrack.write(buffer, 0, buffer.size)
-        audioTrack.play()
-    } catch (_: Exception) {}
 }

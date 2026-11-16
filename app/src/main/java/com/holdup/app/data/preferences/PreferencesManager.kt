@@ -15,11 +15,20 @@ import java.io.IOException
 import java.text.SimpleDateFormat
 import java.util.*
 
-private val Context.dataStore by preferencesDataStore(name = "holdup_preferences")
+internal val Context.dataStore by preferencesDataStore(name = "holdup_preferences")
 
 class PreferencesManager(private val context: Context) {
 
     private val json = Json { ignoreUnknownKeys = true }
+    val petRepository = PetPreferencesRepository(context, json)
+    private val sessionHelper = SessionPreferencesHelper(
+        context = context,
+        json = json,
+        petRepository = petRepository,
+        getTodayDateString = ::getTodayDateString,
+        readDailyGraceBudget = ::readDailyGraceBudget,
+        rolloverDayIfNeeded = ::rolloverDayIfNeeded
+    )
 
     companion object {
         private val KEY_MONITORING_ENABLED = booleanPreferencesKey("monitoring_enabled")
@@ -27,17 +36,21 @@ class PreferencesManager(private val context: Context) {
         private val KEY_GLOBAL_SETTINGS = stringPreferencesKey("global_settings_json")
         private val KEY_PER_APP_RULES = stringPreferencesKey("per_app_rules_json")
         private val KEY_CUSTOM_ACTIVITIES = stringPreferencesKey("custom_activities_json")
-        private val KEY_TODAY_DATE = stringPreferencesKey("stats_today_date")
+        internal val KEY_TODAY_DATE = stringPreferencesKey("stats_today_date")
         private val KEY_TOTAL_INTERCEPTIONS = intPreferencesKey("stats_total_interceptions")
         private val KEY_WALKED_AWAY = intPreferencesKey("stats_walked_away")
-        private val KEY_PROCEEDED = intPreferencesKey("stats_proceeded")
+        internal val KEY_PROCEEDED = intPreferencesKey("stats_proceeded")
         private val KEY_MINUTES_SAVED = intPreferencesKey("stats_minutes_saved")
-        private val KEY_ACTIVE_SESSIONS = stringPreferencesKey("active_sessions_json")
+        internal val KEY_ACTIVE_SESSIONS = stringPreferencesKey("active_sessions_json")
+        internal val KEY_ACTIVE_SESSION_RECORDS = stringPreferencesKey("active_session_records_json")
         private val KEY_ONBOARDING_COMPLETED = booleanPreferencesKey("onboarding_completed")
         private val KEY_CUSTOM_REFLECTIONS = stringSetPreferencesKey("custom_reflections")
         private val KEY_DISMISSED_REFLECTIONS = stringSetPreferencesKey("dismissed_reflections")
-        private val KEY_POINTS_TODAY = intPreferencesKey("stats_points_today")
-        private val KEY_LIFETIME_POINTS = intPreferencesKey("stats_lifetime_points")
+        internal val KEY_POINTS_TODAY = intPreferencesKey("stats_points_today")
+        internal val KEY_LIFETIME_POINTS = intPreferencesKey("stats_lifetime_points")
+        internal val KEY_SPENDABLE_POINTS = intPreferencesKey("stats_spendable_points")
+        internal val KEY_WALK_AWAY_POINTS_TODAY = intPreferencesKey("stats_walk_away_points_today")
+        internal val KEY_ZOO_STATE_JSON = stringPreferencesKey("zoo_state_json")
         private val KEY_LAST_INTERVENTION_TYPE = stringPreferencesKey("last_intervention_type")
         private val KEY_SHUFFLE_BAG = stringPreferencesKey("shuffle_bag_json")
         private val KEY_LAST_REFLECTION_QUOTE = stringPreferencesKey("last_reflection_quote")
@@ -48,12 +61,12 @@ class PreferencesManager(private val context: Context) {
         private val KEY_TEMP_SETTINGS_UNLOCK_UNTIL = longPreferencesKey("temp_settings_unlock_until")
         private val KEY_RELAPSE_RESISTANCE_ENABLED = booleanPreferencesKey("relapse_resistance_enabled")
         private val KEY_APP_INTERVENTION_TIMESTAMPS = stringPreferencesKey("app_intervention_timestamps_json")
-        private val KEY_LAST_INTERRUPTION_TIMESTAMP = longPreferencesKey("last_interruption_timestamp")
+        internal val KEY_LAST_INTERRUPTION_TIMESTAMP = longPreferencesKey("last_interruption_timestamp")
         private val KEY_CLEAN_HOURS_AWARDED_TODAY = intPreferencesKey("clean_hours_awarded_today")
         private val KEY_CLEAN_DAY_BONUS_AWARDED = booleanPreferencesKey("clean_day_bonus_awarded")
         private val KEY_ACCENT_COLOR_PRESET = stringPreferencesKey("accent_color_preset")
-        private val KEY_GRACE_USED_TODAY = intPreferencesKey("stats_grace_used_today")
-        private val KEY_OVER_BUDGET_OPENS_TODAY = intPreferencesKey("stats_over_budget_opens_today")
+        internal val KEY_GRACE_USED_TODAY = intPreferencesKey("stats_grace_used_today")
+        internal val KEY_OVER_BUDGET_OPENS_TODAY = intPreferencesKey("stats_over_budget_opens_today")
         private val KEY_CURRENT_STREAK_DAYS = intPreferencesKey("stats_current_streak_days")
         private val KEY_LONGEST_STREAK_DAYS = intPreferencesKey("stats_longest_streak_days")
         private val KEY_STREAK_FREEZES_OWNED = intPreferencesKey("stats_streak_freezes_owned")
@@ -188,6 +201,8 @@ class PreferencesManager(private val context: Context) {
         val currentStreak = prefs[KEY_CURRENT_STREAK_DAYS] ?: 0
         val longestStreak = prefs[KEY_LONGEST_STREAK_DAYS] ?: 0
         val streakFreezes = prefs[KEY_STREAK_FREEZES_OWNED] ?: 0
+        val spendable = petRepository.readSpendablePoints(prefs)
+        val walkAwayPtsToday = if (isToday) prefs[KEY_WALK_AWAY_POINTS_TODAY] ?: 0 else 0
 
         val isMonitoring = prefs[KEY_MONITORING_ENABLED] ?: true
         val monitoredSet = prefs[KEY_MONITORED_PACKAGES] ?: DEFAULT_TARGET_PACKAGES
@@ -218,9 +233,13 @@ class PreferencesManager(private val context: Context) {
             overBudgetOpensToday = overBudgetToday,
             currentStreakDays = currentStreak,
             longestStreakDays = longestStreak,
-            streakFreezesOwned = streakFreezes
+            streakFreezesOwned = streakFreezes,
+            spendablePoints = spendable,
+            walkAwayPointsToday = walkAwayPtsToday
         )
     }
+
+    val zooState: Flow<ZooState> get() = petRepository.zooState
 
     val isChildSafetyEnabled: Flow<Boolean> = context.dataStore.data.map { prefs ->
         prefs[KEY_CHILD_SAFETY_ENABLED] ?: false
@@ -302,19 +321,6 @@ class PreferencesManager(private val context: Context) {
         }
     }
 
-    suspend fun recordProceedPenalty(points: Int = 5) {
-        val today = getTodayDateString()
-        context.dataStore.edit { prefs ->
-            val savedDate = prefs[KEY_TODAY_DATE] ?: ""
-            if (savedDate == today) {
-                val currentToday = prefs[KEY_POINTS_TODAY] ?: 0
-                prefs[KEY_POINTS_TODAY] = (currentToday - points).coerceAtLeast(0)
-            }
-            val currentLifetime = prefs[KEY_LIFETIME_POINTS] ?: 0
-            prefs[KEY_LIFETIME_POINTS] = (currentLifetime - points).coerceAtLeast(0)
-        }
-    }
-
     private fun rolloverDayIfNeeded(
         prefs: MutablePreferences,
         today: String
@@ -337,7 +343,9 @@ class PreferencesManager(private val context: Context) {
                     (preset.cleanDayBonus / 2).coerceAtLeast(5)
                 }
                 val lifetime = prefs[KEY_LIFETIME_POINTS] ?: 0
+                val spendable = petRepository.readSpendablePoints(prefs)
                 prefs[KEY_LIFETIME_POINTS] = lifetime + bonus
+                prefs[KEY_SPENDABLE_POINTS] = spendable + bonus
             }
 
             // Update Daily Mindful Streak
@@ -366,15 +374,16 @@ class PreferencesManager(private val context: Context) {
         prefs[KEY_CLEAN_DAY_BONUS_AWARDED] = false
         prefs[KEY_GRACE_USED_TODAY] = 0
         prefs[KEY_OVER_BUDGET_OPENS_TODAY] = 0
+        prefs[KEY_WALK_AWAY_POINTS_TODAY] = 0
     }
 
     suspend fun buyStreakFreeze(): Boolean {
         var purchased = false
         context.dataStore.edit { prefs ->
-            val lifetime = prefs[KEY_LIFETIME_POINTS] ?: 0
+            val spendable = petRepository.readSpendablePoints(prefs)
             val freezes = prefs[KEY_STREAK_FREEZES_OWNED] ?: 0
-            if (lifetime >= STREAK_FREEZE_COST && freezes < MAX_STREAK_FREEZES) {
-                prefs[KEY_LIFETIME_POINTS] = lifetime - STREAK_FREEZE_COST
+            if (spendable >= STREAK_FREEZE_COST && freezes < MAX_STREAK_FREEZES) {
+                prefs[KEY_SPENDABLE_POINTS] = spendable - STREAK_FREEZE_COST
                 prefs[KEY_STREAK_FREEZES_OWNED] = freezes + 1
                 purchased = true
             }
@@ -414,13 +423,16 @@ class PreferencesManager(private val context: Context) {
                 val hoursToAward = fullHours - alreadyAwardedHours
                 newPointsToAdd += hoursToAward * preset.hourlyPoints
                 prefs[KEY_CLEAN_HOURS_AWARDED_TODAY] = fullHours
+                petRepository.clearActivePetSadOnCleanFocusHour(prefs, today)
             }
 
             if (newPointsToAdd > 0) {
                 val currentToday = prefs[KEY_POINTS_TODAY] ?: 0
                 val currentLifetime = prefs[KEY_LIFETIME_POINTS] ?: 0
+                val currentSpendable = petRepository.readSpendablePoints(prefs)
                 prefs[KEY_POINTS_TODAY] = currentToday + newPointsToAdd
                 prefs[KEY_LIFETIME_POINTS] = currentLifetime + newPointsToAdd
+                prefs[KEY_SPENDABLE_POINTS] = currentSpendable + newPointsToAdd
             }
         }
         return todayStats.first()
@@ -460,43 +472,31 @@ class PreferencesManager(private val context: Context) {
             val saved = prefs[KEY_MINUTES_SAVED] ?: 0
             prefs[KEY_WALKED_AWAY] = walked + 1
             prefs[KEY_MINUTES_SAVED] = saved + minutesSavedEstimate
+
+            val walkAwayPtsToday = prefs[KEY_WALK_AWAY_POINTS_TODAY] ?: 0
+            if (walkAwayPtsToday < PetPreferencesRepository.MAX_DAILY_WALK_AWAY_POINTS) {
+                val reward = PetPreferencesRepository.WALK_AWAY_REWARD_POINTS
+                val currentToday = prefs[KEY_POINTS_TODAY] ?: 0
+                val currentLifetime = prefs[KEY_LIFETIME_POINTS] ?: 0
+                val currentSpendable = petRepository.readSpendablePoints(prefs)
+                prefs[KEY_WALK_AWAY_POINTS_TODAY] = walkAwayPtsToday + reward
+                prefs[KEY_POINTS_TODAY] = currentToday + reward
+                prefs[KEY_LIFETIME_POINTS] = currentLifetime + reward
+                prefs[KEY_SPENDABLE_POINTS] = currentSpendable + reward
+            }
         }
     }
 
     suspend fun recordProceedSession(
         packageName: String,
         durationMinutes: Int,
-        useGrace: Boolean = false
-    ) {
-        val today = getTodayDateString()
-        val now = System.currentTimeMillis()
-        val expiresAt = now + (durationMinutes * 60 * 1000L)
-        context.dataStore.edit { prefs ->
-            rolloverDayIfNeeded(prefs, today)
-            val proceeded = prefs[KEY_PROCEEDED] ?: 0
-            prefs[KEY_PROCEEDED] = proceeded + 1
-
-            val graceBudget = readDailyGraceBudget(prefs)
-            val graceUsed = prefs[KEY_GRACE_USED_TODAY] ?: 0
-            val graceRemaining = (graceBudget - graceUsed).coerceAtLeast(0)
-
-            if (useGrace && graceRemaining > 0) {
-                prefs[KEY_GRACE_USED_TODAY] = graceUsed + durationMinutes
-            } else {
-                val overBudget = prefs[KEY_OVER_BUDGET_OPENS_TODAY] ?: 0
-                prefs[KEY_OVER_BUDGET_OPENS_TODAY] = overBudget + 1
-                prefs[KEY_LAST_INTERRUPTION_TIMESTAMP] = now
-            }
-
-            // Update active sessions map
-            val activeSessions = try {
-                prefs[KEY_ACTIVE_SESSIONS]?.let { json.decodeFromString<Map<String, Long>>(it) } ?: emptyMap()
-            } catch (e: Exception) {
-                emptyMap()
-            }.toMutableMap()
-            activeSessions[packageName] = expiresAt
-            prefs[KEY_ACTIVE_SESSIONS] = json.encodeToString(activeSessions)
-        }
+        relapsePenaltyPoints: Int = 0
+    ): SessionCostBreakdown {
+        return sessionHelper.recordProceedSession(
+            packageName = packageName,
+            durationMinutes = durationMinutes,
+            relapsePenaltyPoints = relapsePenaltyPoints
+        )
     }
 
     val activeSessions: Flow<Map<String, Long>> = context.dataStore.data.map { prefs ->
@@ -524,16 +524,16 @@ class PreferencesManager(private val context: Context) {
         }
     }
 
-    suspend fun clearSession(packageName: String) {
-        context.dataStore.edit { prefs ->
-            val activeSessions = try {
-                prefs[KEY_ACTIVE_SESSIONS]?.let { json.decodeFromString<Map<String, Long>>(it) } ?: emptyMap()
-            } catch (e: Exception) {
-                emptyMap()
-            }.toMutableMap()
-            activeSessions.remove(packageName)
-            prefs[KEY_ACTIVE_SESSIONS] = json.encodeToString(activeSessions)
-        }
+    suspend fun clearSession(
+        packageName: String,
+        wasCompleted: Boolean = true,
+        activeDurationMs: Long? = null
+    ): SessionRefundResult? {
+        return sessionHelper.clearSession(
+            packageName = packageName,
+            wasCompleted = wasCompleted,
+            activeDurationMs = activeDurationMs
+        )
     }
 
     suspend fun saveLastChosenDuration(packageName: String, minutes: Int) {

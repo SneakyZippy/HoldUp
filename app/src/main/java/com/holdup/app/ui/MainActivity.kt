@@ -61,6 +61,7 @@ import androidx.compose.ui.geometry.Offset
 import com.holdup.app.ui.components.*
 import com.holdup.app.ui.dashboard.DashboardTab
 import com.holdup.app.ui.onboarding.OnboardingScreen
+import com.holdup.app.ui.pet.ZooTab
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.ui.text.style.TextAlign
@@ -106,6 +107,7 @@ fun MainScreen(
     val isMonitoringEnabled by prefs.isMonitoringEnabled.collectAsStateWithLifecycle(initialValue = true)
     val monitoredPackages by prefs.monitoredPackages.collectAsStateWithLifecycle(initialValue = emptySet())
     val todayStats by prefs.todayStats.collectAsStateWithLifecycle(initialValue = DailyStats())
+    val zooState by prefs.zooState.collectAsStateWithLifecycle(initialValue = ZooState())
     val globalSettings by prefs.globalSettings.collectAsStateWithLifecycle(initialValue = GlobalInterventionSettings())
     val alternatives by prefs.alternativeActivities.collectAsStateWithLifecycle(initialValue = defaultAlternativeActivities)
     val perAppRules by prefs.perAppRules.collectAsStateWithLifecycle(initialValue = emptyMap())
@@ -176,6 +178,7 @@ fun MainScreen(
 
     LaunchedEffect(Unit) {
         checkPermissions()
+        prefs.petRepository.ensureStarterEgg()
     }
 
     androidx.lifecycle.compose.LifecycleEventEffect(androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
@@ -227,6 +230,7 @@ fun MainScreen(
                 ZenPillNavBar(
                     items = listOf(
                         PillNavItem("Dashboard", Icons.Default.Dashboard),
+                        PillNavItem("Zoo", Icons.Default.Pets),
                         PillNavItem("Apps", Icons.Default.Apps),
                         PillNavItem("Studio", Icons.Default.Tune),
                         PillNavItem("Settings", Icons.Default.Settings)
@@ -259,6 +263,7 @@ fun MainScreen(
                                 }
                             },
                             todayStats = todayStats,
+                            zooState = zooState,
                             monitoredPackages = monitoredPackages,
                             isAccessibilityGranted = isAccessibilityGranted,
                             isUsageAccessGranted = isUsageAccessGranted,
@@ -270,6 +275,7 @@ fun MainScreen(
                                 context.startActivity(intent)
                             },
                             onOpenTour = { showOnboardingManually = true },
+                            onOpenZoo = { currentTab = 1 },
                             onBuyStreakFreeze = {
                                 coroutineScope.launch {
                                     val bought = prefs.buyStreakFreeze()
@@ -278,7 +284,43 @@ fun MainScreen(
                                 }
                             }
                         )
-                        1 -> AppsTab(
+                        1 -> ZooTab(
+                            zooState = zooState,
+                            todayStats = todayStats,
+                            onFeedPet = { treat ->
+                                coroutineScope.launch {
+                                    val res = prefs.petRepository.feedActivePet(treat)
+                                    val msg = when {
+                                        !res.success -> "Need ${treat.costPoints} pts"
+                                        res.didEvolveTo != null -> "Evolved to ${res.didEvolveTo.label}!"
+                                        res.wasCheerUp && res.xpGained == 0 -> "Cheered up! Mood restored."
+                                        else -> "+${res.xpGained} XP fed!"
+                                    }
+                                    android.widget.Toast.makeText(context, msg, android.widget.Toast.LENGTH_SHORT).show()
+                                }
+                            },
+                            onAdoptMysteryEgg = {
+                                coroutineScope.launch {
+                                    val res = prefs.petRepository.adoptEgg(null)
+                                    val msg = if (res.success) "Adopted a ${res.pet?.species?.displayName} egg!" else "Need 100 pts for Mystery Egg"
+                                    android.widget.Toast.makeText(context, msg, android.widget.Toast.LENGTH_SHORT).show()
+                                }
+                            },
+                            onAdoptSpecificEgg = { species ->
+                                coroutineScope.launch {
+                                    val res = prefs.petRepository.adoptEgg(species)
+                                    val msg = if (res.success) "Adopted ${species.displayName} egg!" else "Need 400 pts"
+                                    android.widget.Toast.makeText(context, msg, android.widget.Toast.LENGTH_SHORT).show()
+                                }
+                            },
+                            onSelectActivePet = { petId ->
+                                coroutineScope.launch { prefs.petRepository.selectActivePet(petId) }
+                            },
+                            onRenamePet = { petId, name ->
+                                coroutineScope.launch { prefs.petRepository.renamePet(petId, name) }
+                            }
+                        )
+                        2 -> AppsTab(
                             monitoredPackages = monitoredPackages,
                             perAppRules = perAppRules,
                             onToggleApp = { pkg, isMonitored ->
@@ -288,7 +330,7 @@ fun MainScreen(
                                 selectedAppForRule = appItem
                             }
                         )
-                        2 -> InterventionsTab(
+                        3 -> InterventionsTab(
                             globalSettings = globalSettings,
                             alternatives = alternatives,
                             customReflections = customReflections,
@@ -305,7 +347,7 @@ fun MainScreen(
                             onOpenQuotesManager = { showQuotesBottomSheet = true },
                             onOpenSwapsManager = { showSwapsBottomSheet = true }
                         )
-                        3 -> SettingsTab(
+                        4 -> SettingsTab(
                             isChildSafetyEnabled = isChildSafetyEnabled,
                             hasParentPin = hasParentPin,
                             onSetChildSafetyEnabled = { enabled ->
@@ -340,7 +382,13 @@ fun MainScreen(
                                 }
                             },
                             currentAccentPreset = accentPreset,
-                            onSelectAccentPreset = onSelectAccentPreset
+                            onSelectAccentPreset = onSelectAccentPreset,
+                            onGrantDebugPoints = {
+                                coroutineScope.launch {
+                                    prefs.petRepository.grantDebugSpendablePoints()
+                                    android.widget.Toast.makeText(context, "Granted 999,999 Spendable Points!", android.widget.Toast.LENGTH_SHORT).show()
+                                }
+                            }
                         )
                     }
                 }

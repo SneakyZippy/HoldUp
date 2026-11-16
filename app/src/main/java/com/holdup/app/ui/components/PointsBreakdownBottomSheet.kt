@@ -61,14 +61,14 @@ fun PointsBreakdownBottomSheet(
             ) {
                 Column {
                     Text(
-                        text = "${todayStats.userLevel} • Tier ${todayStats.currentLevelNumber}",
+                        text = "${todayStats.userLevel} • Tier ${todayStats.currentLevelNumber} (${todayStats.lifetimePoints} XP)",
                         style = MaterialTheme.typography.labelMedium.copy(
                             color = MaterialTheme.colorScheme.primary,
                             fontWeight = FontWeight.Bold
                         )
                     )
                     Text(
-                        text = "${todayStats.lifetimePoints} Mindful Points",
+                        text = "${todayStats.spendablePoints} Spendable Points",
                         style = MaterialTheme.typography.headlineMedium.copy(
                             fontWeight = FontWeight.Bold
                         )
@@ -177,7 +177,7 @@ fun PointsBreakdownBottomSheet(
 
                     Spacer(modifier = Modifier.height(12.dp))
 
-                    val canBuyFreeze = todayStats.lifetimePoints >= PreferencesManager.STREAK_FREEZE_COST &&
+                    val canBuyFreeze = todayStats.spendablePoints >= PreferencesManager.STREAK_FREEZE_COST &&
                         todayStats.streakFreezesOwned < PreferencesManager.MAX_STREAK_FREEZES
 
                     OutlinedButton(
@@ -203,7 +203,7 @@ fun PointsBreakdownBottomSheet(
                             text = when {
                                 todayStats.streakFreezesOwned >= PreferencesManager.MAX_STREAK_FREEZES ->
                                     "Max Streak Freezes Held (${PreferencesManager.MAX_STREAK_FREEZES}/${PreferencesManager.MAX_STREAK_FREEZES})"
-                                todayStats.lifetimePoints < PreferencesManager.STREAK_FREEZE_COST ->
+                                todayStats.spendablePoints < PreferencesManager.STREAK_FREEZE_COST ->
                                     "Streak Freeze (${PreferencesManager.STREAK_FREEZE_COST} pts)"
                                 else ->
                                     "Get Streak Freeze (${PreferencesManager.STREAK_FREEZE_COST} pts)"
@@ -277,9 +277,11 @@ fun PointsBreakdownBottomSheet(
                     )
                     Text(
                         text = "• Stay out of shielded apps: +${preset.hourlyPoints} pts/hr (24/7 while shield is on)\n" +
+                            "• Walk away from pauses: +10 pts each (up to 30 pts/day)\n" +
                             "• Clean Day Bonus: +${preset.cleanDayBonus} pts for 0 opens (+${(preset.cleanDayBonus / 2).coerceAtLeast(5)} pts within Grace)\n" +
-                            "• Stricter Daily Grace in Settings = higher point multiplier\n" +
-                            "• Exceeding Grace resets Clean Focus; relapsing within 15m costs -5 pts",
+                            "• Spend points in the Zoo or for Freezes without ever lowering your Lifetime XP\n" +
+                            "• After Grace, sessions cost -1 pt/min (longer stays cost more); relapsing within 15m adds -5 pts\n" +
+                            "• Closing an app early refunds unused Grace minutes and stay points",
                         style = MaterialTheme.typography.bodySmall.copy(
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             lineHeight = 18.sp

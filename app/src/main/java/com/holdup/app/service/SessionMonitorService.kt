@@ -7,8 +7,10 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.os.Build
 import android.os.IBinder
+import android.widget.Toast
 import androidx.core.app.NotificationCompat
 import com.holdup.app.HoldUpApp
+import com.holdup.app.data.model.SessionRefundResult
 import com.holdup.app.ui.InterventionActivity
 import kotlinx.coroutines.*
 
@@ -21,6 +23,8 @@ class SessionMonitorService : Service() {
 
     private var currentMonitoredPackage: String? = null
     private var isAppInForeground: Boolean = false
+    private var sessionStartTimeMillis: Long = 0L
+    private var foregroundExitTimeMillis: Long? = null
 
     private val screenOffReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
@@ -107,6 +111,8 @@ class SessionMonitorService : Service() {
         currentMonitoredPackage = targetPackage
         activePackageName = targetPackage
         isAppInForeground = true
+        sessionStartTimeMillis = System.currentTimeMillis()
+        foregroundExitTimeMillis = null
 
         val notification = buildOngoingNotification(targetPackage, minutes)
         startForeground(NOTIFICATION_ID, notification)
@@ -143,12 +149,14 @@ class SessionMonitorService : Service() {
         if (foregroundPackage == monitored) {
             // User is actively in the monitored app
             isAppInForeground = true
+            foregroundExitTimeMillis = null
             exitGraceJob?.cancel()
             exitGraceJob = null
         } else {
             // User switched away to launcher, home, or another app
             isAppInForeground = false
             if (exitGraceJob?.isActive != true) {
+                foregroundExitTimeMillis = System.currentTimeMillis()
                 exitGraceJob = serviceScope.launch {
                     // Grace period of 3 seconds in case of quick app-switch gesture
                     delay(3000L)
@@ -162,6 +170,9 @@ class SessionMonitorService : Service() {
     private fun onScreenTurnedOff() {
         val monitored = currentMonitoredPackage ?: return
         isAppInForeground = false
+        if (foregroundExitTimeMillis == null) {
+            foregroundExitTimeMillis = System.currentTimeMillis()
+        }
         exitGraceJob?.cancel()
         exitGraceJob = serviceScope.launch {
             delay(2000L)
@@ -181,15 +192,30 @@ class SessionMonitorService : Service() {
     private fun handleSessionEnded(wasCompleted: Boolean, targetPackage: String) {
         timerJob?.cancel()
         exitGraceJob?.cancel()
+        val activeDurationMs = if (!wasCompleted && sessionStartTimeMillis > 0L) {
+            val exitTime = foregroundExitTimeMillis ?: System.currentTimeMillis()
+            (exitTime - sessionStartTimeMillis).coerceAtLeast(0L)
+        } else {
+            null
+        }
         currentMonitoredPackage = null
         activePackageName = null
         isAppInForeground = false
+        sessionStartTimeMillis = 0L
+        foregroundExitTimeMillis = null
 
-        // Clear active session in preferences so user is guarded next time.
+        // Clear active session in preferences and refund unused Grace/duration points on early exit.
         // Use applicationScope so that service teardown / stopSelf() does not cancel DataStore writes.
         if (targetPackage.isNotBlank()) {
             HoldUpApp.instance.applicationScope.launch {
-                HoldUpApp.instance.preferencesManager.clearSession(targetPackage)
+                val refund = HoldUpApp.instance.preferencesManager.clearSession(
+                    packageName = targetPackage,
+                    wasCompleted = wasCompleted,
+                    activeDurationMs = activeDurationMs
+                )
+                if (refund != null && refund.hasRefund) {
+                    showRefundToast(refund)
+                }
             }
         }
 
@@ -200,6 +226,22 @@ class SessionMonitorService : Service() {
             stopForeground(true)
         }
         stopSelf()
+    }
+
+    private suspend fun showRefundToast(refund: SessionRefundResult) {
+        val parts = buildList {
+            if (refund.graceMinutesRefunded > 0) add("${refund.graceMinutesRefunded}m Grace")
+            if (refund.spendablePointsRefunded > 0) add("${refund.spendablePointsRefunded} pts")
+        }
+        if (parts.isEmpty()) return
+        val appContext = applicationContext
+        withContext(Dispatchers.Main) {
+            Toast.makeText(
+                appContext,
+                "⏱️ Closed early: refunded ${parts.joinToString(" & ")}",
+                Toast.LENGTH_SHORT
+            ).show()
+        }
     }
 
     private fun launchSoftNudge(targetPackage: String) {
@@ -263,6 +305,8 @@ class SessionMonitorService : Service() {
             instance = null
         }
         activePackageName = null
+        sessionStartTimeMillis = 0L
+        foregroundExitTimeMillis = null
         serviceJob.cancel()
     }
 

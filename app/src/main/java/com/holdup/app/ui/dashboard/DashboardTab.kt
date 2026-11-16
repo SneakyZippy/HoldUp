@@ -19,6 +19,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.holdup.app.data.model.DailyStats
+import com.holdup.app.data.model.ZooState
 import com.holdup.app.ui.components.PointsBreakdownBottomSheet
 
 @Composable
@@ -27,12 +28,14 @@ fun DashboardTab(
     isChildSafetyEnabled: Boolean,
     onToggleMonitoring: (Boolean) -> Unit,
     todayStats: DailyStats,
+    zooState: ZooState = ZooState(),
     monitoredPackages: Set<String>,
     isAccessibilityGranted: Boolean,
     isUsageAccessGranted: Boolean,
     onOpenAccessibilitySettings: () -> Unit,
     onOpenUsageSettings: () -> Unit,
     onOpenTour: () -> Unit,
+    onOpenZoo: () -> Unit = {},
     onBuyStreakFreeze: () -> Unit = {}
 ) {
     val context = LocalContext.current
@@ -87,6 +90,14 @@ fun DashboardTab(
             BentoStatsRow(
                 todayStats = todayStats,
                 onPointsClick = { showPointsSheet = true }
+            )
+        }
+
+        item {
+            DashboardCompanionCard(
+                zooState = zooState,
+                todayStats = todayStats,
+                onClick = onOpenZoo
             )
         }
 

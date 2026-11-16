@@ -259,7 +259,7 @@ private fun MindfulPointsTile(
                     maxLines = 1
                 )
                 Text(
-                    text = "${todayStats.lifetimePoints} pts",
+                    text = "${todayStats.spendablePoints} pts",
                     style = MaterialTheme.typography.titleMedium.copy(
                         fontWeight = FontWeight.Bold,
                         fontSize = 19.sp,
@@ -280,7 +280,7 @@ private fun MindfulPointsTile(
                 Spacer(modifier = Modifier.height(6.dp))
                 val remaining = (todayStats.nextLevelTarget - todayStats.lifetimePoints).coerceAtLeast(0)
                 Text(
-                    text = if (remaining > 0) "$remaining to Tier ${todayStats.currentLevelNumber + 1}" else "Max tier reached!",
+                    text = if (remaining > 0) "${todayStats.lifetimePoints} XP • $remaining to Tier ${todayStats.currentLevelNumber + 1}" else "${todayStats.lifetimePoints} XP • Max tier!",
                     style = MaterialTheme.typography.labelSmall.copy(
                         fontSize = 10.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant

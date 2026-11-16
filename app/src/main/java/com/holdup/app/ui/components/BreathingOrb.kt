@@ -138,7 +138,6 @@ fun BreathingOrb(
         else -> 28f - phaseProgress * 28f
     }
 
-    val sweepAngle = if (isFinished) 360f else (progressValue * 360f)
     val remainingSeconds = if (isFinished) 0 else ceil((1f - progressValue) * sessionSeconds).toInt().coerceAtLeast(0)
 
     Column(
@@ -211,13 +210,14 @@ fun BreathingOrb(
                     secondary = secondaryColor
                 )
 
-                // 6. Perimeter progress halo with luminous head bead
-                BreathingBloomRenderer.drawProgressHalo(
+                // 6. Expanding and contracting breathing halo
+                BreathingBloomRenderer.drawBreathingHalo(
                     scope = this,
                     center = center,
-                    ringRadius = ringRadius,
-                    sweepAngle = sweepAngle,
-                    primary = primaryColor
+                    maxRingRadius = ringRadius,
+                    scale = currentScale,
+                    primary = primaryColor,
+                    secondary = secondaryColor
                 )
             }
 

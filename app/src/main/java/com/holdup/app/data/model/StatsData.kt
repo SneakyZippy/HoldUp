@@ -53,7 +53,9 @@ data class DailyStats(
     val overBudgetOpensToday: Int = 0,
     val currentStreakDays: Int = 0,
     val longestStreakDays: Int = 0,
-    val streakFreezesOwned: Int = 0
+    val streakFreezesOwned: Int = 0,
+    val spendablePoints: Int = 0,
+    val walkAwayPointsToday: Int = 0
 ) {
     val gracePreset: GraceBudgetPreset
         get() = GraceBudgetPreset.fromMinutes(dailyGraceBudgetMinutes)

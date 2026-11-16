@@ -3,7 +3,6 @@ package com.holdup.app.ui.components
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.unit.dp
@@ -14,7 +13,7 @@ import kotlin.math.sin
 /**
  * Pure Canvas rendering helpers for the Sacred Lotus mindful breathing visuals.
  * Renders glowing ambient auras, multi-layered rotating organic petals, floating stardust,
- * and a perimeter progress halo.
+ * and a breathing halo ring that expands and contracts with the breath.
  */
 object BreathingBloomRenderer {
 
@@ -160,53 +159,46 @@ object BreathingBloomRenderer {
         )
     }
 
-    fun drawProgressHalo(
+    fun drawBreathingHalo(
         scope: DrawScope,
         center: Offset,
-        ringRadius: Float,
-        sweepAngle: Float,
-        primary: Color
+        maxRingRadius: Float,
+        scale: Float,
+        primary: Color,
+        secondary: Color
     ) = with(scope) {
-        // Delicate background track
+        // Subtle outer target guide ring representing full inhalation
         drawCircle(
             color = Color.White.copy(alpha = 0.08f),
-            radius = ringRadius,
+            radius = maxRingRadius,
             center = center,
-            style = Stroke(width = 3.dp.toPx())
+            style = Stroke(width = 1.5.dp.toPx())
         )
 
-        // Smooth active progress arc
-        if (sweepAngle > 0.5f) {
-            drawArc(
-                brush = Brush.sweepGradient(
-                    colors = listOf(
-                        primary.copy(alpha = 0.4f),
-                        primary,
-                        Color.White
-                    ),
-                    center = center
-                ),
-                startAngle = -90f,
-                sweepAngle = sweepAngle,
-                useCenter = false,
-                style = Stroke(width = 3.2.dp.toPx(), cap = StrokeCap.Round)
-            )
+        val activeRadius = maxRingRadius * scale
 
-            // Luminous head bead
-            val headRad = Math.toRadians((-90.0 + sweepAngle))
-            val hx = center.x + ringRadius * cos(headRad).toFloat()
-            val hy = center.y + ringRadius * sin(headRad).toFloat()
+        // Soft outer glow ring that expands and contracts with the breath
+        drawCircle(
+            color = primary.copy(alpha = (0.18f * scale).coerceIn(0f, 1f)),
+            radius = activeRadius,
+            center = center,
+            style = Stroke(width = 10.dp.toPx())
+        )
 
-            drawCircle(
-                color = primary.copy(alpha = 0.5f),
-                radius = 6.dp.toPx(),
-                center = Offset(hx, hy)
-            )
-            drawCircle(
-                color = Color.White,
-                radius = 2.8.dp.toPx(),
-                center = Offset(hx, hy)
-            )
-        }
+        // Main crisp breathing ring
+        drawCircle(
+            color = primary.copy(alpha = (0.45f + 0.45f * scale).coerceIn(0f, 1f)),
+            radius = activeRadius,
+            center = center,
+            style = Stroke(width = 2.6.dp.toPx())
+        )
+
+        // Delicate inner harmonic ring
+        drawCircle(
+            color = secondary.copy(alpha = (0.22f * scale).coerceIn(0f, 1f)),
+            radius = activeRadius * 0.85f,
+            center = center,
+            style = Stroke(width = 1.2.dp.toPx())
+        )
     }
 }
